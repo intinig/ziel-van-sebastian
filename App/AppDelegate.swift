@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var renderer: ZielRenderer?
     var director: Director?
     var config = ZielConfig()
+    var displayManager: DisplayManager?
     private var demoTimer: Timer?
     private var configWatcher: DispatchSourceFileSystemObject?
 
@@ -63,11 +64,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.title = "Ziel van Sebastian"
             window.center()
         } else {
-            let screen = NSScreen.main!
-            window = NSWindow(contentRect: screen.frame, styleMask: [.borderless],
+            window = NSWindow(contentRect: NSScreen.main?.frame ?? .zero,
+                              styleMask: [.borderless],
                               backing: .buffered, defer: false)
             window.level = .mainMenu + 1
+            window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
             NSApp.presentationOptions = [.hideDock, .hideMenuBar]
+            let dm = DisplayManager(window: window, config: config.display)
+            self.displayManager = dm
+            dm.activate()
         }
         window.contentView = mtkView
         window.makeKeyAndOrderFront(nil)
@@ -117,7 +122,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func watchConfig(at url: URL, renderer: ZielRenderer, director: Director) {
         let fd = open(url.path, O_EVTONLY)
-        guard fd >= 0 else { return }   // no file yet; defaults in use
+        guard fd >= 0 else { return }
+        // No file yet (first boot) — defaults in use. Note: if the config file
+        // is DELETED later, the watcher dies and a recreated file won't be
+        // seen until restart. Acceptable for the appliance; edit in place.
         let source = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: fd, eventMask: [.write, .delete, .rename], queue: .main)
         source.setEventHandler { [weak self] in
