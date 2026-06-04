@@ -70,14 +70,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.level = .mainMenu + 1
             window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
             NSApp.presentationOptions = [.hideDock, .hideMenuBar]
-            let dm = DisplayManager(window: window, config: config.display)
-            self.displayManager = dm
-            dm.activate()
+            self.displayManager = DisplayManager(window: window, config: config.display)
         }
         window.contentView = mtkView
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         self.window = window
+        // Place/front only after contentView is set, so the appliance never
+        // shows an empty window. No-op on the --window path (displayManager nil).
+        displayManager?.activate()
 
         watchConfig(at: configURL, renderer: renderer, director: director)
     }

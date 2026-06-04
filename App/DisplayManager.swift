@@ -23,11 +23,14 @@ final class DisplayManager {
             self?.place()
         }
         if config.preventDisplaySleep {
-            IOPMAssertionCreateWithName(
+            let result = IOPMAssertionCreateWithName(
                 kIOPMAssertionTypePreventUserIdleDisplaySleep as CFString,
                 IOPMAssertionLevel(kIOPMAssertionLevelOn),
                 "Ziel van Sebastian appliance display" as CFString,
                 &sleepAssertion)
+            if result != kIOReturnSuccess {
+                fputs("warning: display-sleep assertion failed (\(result))\n", stderr)
+            }
         }
     }
 
@@ -59,7 +62,8 @@ final class DisplayManager {
         }
         window.setFrame(screen.frame, display: true)
         window.makeKeyAndOrderFront(nil)
+        // Idempotent — NSCursor.hide() is refcounted and would accumulate on
+        // every display reconfiguration, so we deliberately don't call it.
         NSCursor.setHiddenUntilMouseMoves(true)
-        NSCursor.hide()
     }
 }
