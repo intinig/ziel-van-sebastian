@@ -36,7 +36,13 @@ Everything the GatewayClient and mock server implement, verified against source:
   - The `token` component is the shared gateway token (`signatureToken = authToken ?? authBootstrapToken` in `client-*.js selectConnectAuth`).
   - OpenClaw stores identity at `~/.openclaw/identity/device.json` as `{version:1, deviceId, publicKeyPem, privateKeyPem, createdAtMs}`.
 - **Challenge-first flow:** the gateway pushes `{"type":"event","event":"connect.challenge","payload":{"nonce":"…","ts":…}}` at socket open. The official client *waits* for it and uses its nonce in the device payload (closing the socket on a challenge timeout). Send `connect` only after the challenge when using device identity.
-- **No subscription step:** with `operator.read`, `agent` and `chat` broadcast events arrive automatically after hello-ok.
+- **Subscription required for channel sessions** (verified empirically against gateway 2026.6.1, 2026-06-04): only the **main** session (`agent:main:main`) broadcasts `agent`/`chat` events automatically after hello-ok. Channel sessions (WhatsApp, iMessage, …) emit **no `agent`/`chat` events at all** — subscribed or not.
+- **`sessions.subscribe`:** send `{"type":"req","id":"…","method":"sessions.subscribe","params":{}}` after hello-ok. Empty params = subscribe to **all** sessions (response: `{"subscribed":true}`). Per-key form `params: {"sessionKey": "…"}` also works but is unnecessary. Must be re-sent after every reconnect (subscription is per-connection).
+- **Channel-session events** (arrive only after subscribing):
+  - `sessions.changed`: `{"type":"event","event":"sessions.changed","payload":{"sessionKey","phase":"start"|"end","runId","ts","session":{…,"origin":{"surface":"whatsapp",…},"status",…}}}` — run lifecycle for channel sessions.
+  - `session.message`: `{"type":"event","event":"session.message","payload":{"sessionKey","agentId","messageId","messageSeq","message":{…}}}` — complete (non-streamed) messages. `message.role == "user"` has **string** `content`; `message.role == "assistant"` has `content` as an **array of blocks** (`{"type":"thinking",…}` and `{"type":"text","text":"…"}`). `session.message` has **no `runId`** — correlate to the active run via `sessions.changed`'s `runId` for the same `sessionKey`.
+  - There is **no streaming** for channel sessions: the assistant reply arrives as one complete `session.message` after generation finishes.
+- **Main-session dedup:** once subscribed, the main session presumably also surfaces via `sessions.changed`/`session.message`; consumers must ignore session.* events for the main session key (from hello-ok `snapshot.health.sessionDefaults.mainSessionKey`, default `agent:main:main`) to avoid double-speaking replies that already streamed via `agent` events.
 - **`agent` event envelope:** `{"type":"event","event":"agent","payload":{"runId","seq","stream","ts","sessionKey"?,"sessionId"?,"isHeartbeat"?,"data":{...}}}`
 - **Streams we consume** (others — `thinking`, `plan`, `item`, etc. — are ignored in v1):
   - `"lifecycle"`: `data.phase` = `"start"` | `"end"` | `"error"`
@@ -44,7 +50,7 @@ Everything the GatewayClient and mock server implement, verified against source:
   - `"assistant"`: `data.delta` = incremental text chunk. (A cumulative `data.text` variant exists; we consume **delta only** to avoid duplication.)
 - **`isHeartbeat: true`** marks background heartbeat runs — drop them entirely (the face must not wake every 30s).
 - **Session identity:** `sessionKey` on the payload (fall back to `runId` when absent).
-- We do NOT use `chat` events (throttled UI projection); the raw `agent` stream covers all runs.
+- We do NOT use `chat` events (throttled UI projection); the raw `agent` stream covers main-session runs only. Channel-session runs are covered by `sessions.changed`/`session.message`.
 
 ---
 
