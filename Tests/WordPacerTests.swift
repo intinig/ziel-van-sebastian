@@ -59,4 +59,26 @@ final class WordPacerTests: XCTestCase {
         XCTAssertNil(p.nextWord())
         XCTAssertTrue(p.isEmpty)
     }
+
+    func testCatchupBoundaryAtStart() {
+        let p = WordPacer(config: PacingConfig())
+        p.feed(String(repeating: "a ", count: 11))   // backlog after pop = 10 == catchupStart
+        XCTAssertEqual(p.nextWord()!.holdMs, 280, accuracy: 0.5)   // factor still 1.0
+    }
+
+    func testCatchupMidpoint() {
+        let p = WordPacer(config: PacingConfig())
+        p.feed(String(repeating: "a ", count: 46))   // backlog after pop = 45, t = 0.5
+        XCTAssertEqual(p.nextWord()!.holdMs, 280 * 0.725, accuracy: 0.5)
+    }
+
+    func testReset() {
+        let p = WordPacer(config: PacingConfig())
+        p.feed("queued part")                         // "queued" in queue, "part" partial
+        p.reset()
+        XCTAssertTrue(p.isEmpty)
+        XCTAssertNil(p.nextWord())
+        p.endOfText()                                 // partial was cleared too
+        XCTAssertNil(p.nextWord())
+    }
 }

@@ -8,6 +8,8 @@ public struct PacedWord: Equatable {
 /// RSVP queue: stripped text in, paced words out. Holds a trailing partial
 /// word until whitespace or endOfText proves it complete.
 public final class WordPacer {
+    /// Replaced atomically by the Director on config reload; new values take effect
+    /// on the next `nextWord()` call.
     public var config: PacingConfig
     private var queue: [String] = []
     private var partial = ""
@@ -39,6 +41,9 @@ public final class WordPacer {
         }
     }
 
+    /// Pops the next complete word. `holdMs` on the returned value is computed using
+    /// the backlog *after* this pop, so `pacer.backlog` immediately following this call
+    /// equals the depth that drove the catch-up factor.
     public func nextWord() -> PacedWord? {
         guard !queue.isEmpty else { return nil }
         let word = queue.removeFirst()
