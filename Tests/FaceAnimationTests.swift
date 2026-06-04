@@ -35,6 +35,17 @@ final class FaceAnimationTests: XCTestCase {
         XCTAssertEqual(FaceAnimation.sweepY(at: 2.8), 0, accuracy: 0.01)
     }
 
+    func testThinkingDotsAppearOneByOne() {
+        // 2s cycle, hard steps: blank, 1, 2, 3, blank.
+        XCTAssertEqual(FaceAnimation.thinkingDotsVisible(at: 0.0), 0)   // p = 0.0
+        XCTAssertEqual(FaceAnimation.thinkingDotsVisible(at: 0.4), 1)   // p = 0.2
+        XCTAssertEqual(FaceAnimation.thinkingDotsVisible(at: 1.0), 2)   // p = 0.5
+        XCTAssertEqual(FaceAnimation.thinkingDotsVisible(at: 1.5), 3)   // p = 0.75
+        XCTAssertEqual(FaceAnimation.thinkingDotsVisible(at: 1.8), 0)   // p = 0.9
+        XCTAssertEqual(FaceAnimation.thinkingDotsVisible(at: 2.4), 1)   // wraps: p = 0.2
+        XCTAssertEqual(FaceAnimation.thinkingDotsVisible(at: 10.5, period: 1.0), 2) // p = 0.5
+    }
+
     func testEyesUpOffsetOnlyWhenThinking() {
         let off = FaceAnimation.eyesUpOffset(at: 2.5)
         XCTAssertLessThanOrEqual(off.dy, 0)

@@ -28,6 +28,19 @@ public enum FaceAnimation {
         (t / period).truncatingRemainder(dividingBy: 1.0)
     }
 
+    /// Thinking dots: how many of the three thought-bubble dots are visible.
+    /// Hard steps (no easing) over a 2s cycle: blank, 1, 2, 3, blank.
+    public static func thinkingDotsVisible(at t: TimeInterval, period: Double = 2.0) -> Int {
+        let p = t.truncatingRemainder(dividingBy: period) / period
+        switch p {
+        case ..<0.15: return 0
+        case ..<0.40: return 1
+        case ..<0.65: return 2
+        case ..<0.85: return 3
+        default: return 0
+        }
+    }
+
     /// Thinking: eyes drift up-left and back, 5s cycle. Grid units
     /// (pre-breathe space — ScenePass applies breathe after this offset).
     public static func eyesUpOffset(at t: TimeInterval) -> (dx: Double, dy: Double) {
