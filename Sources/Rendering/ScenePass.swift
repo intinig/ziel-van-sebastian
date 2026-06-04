@@ -132,54 +132,6 @@ final class ScenePass {
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: verts.count / 2)
     }
 
-    /// Thought-bubble trail at the dozing "z z Z" anchor (NDC 0.55, 0.6).
-    /// Draws the first `visible` dots (0…3) left to right, sizes growing,
-    /// near-horizontal with a gentle rise. Shadow pass first when themed.
-    func drawThinkingDots(encoder: MTLRenderCommandEncoder,
-                          viewW: Double, viewH: Double,
-                          visible: Int, tint: ColorRGB) {
-        guard visible > 0 else { return }
-        let b = 0.1 * viewH                                  // zzz box height
-        let sides = [0.40 * b, 0.60 * b, 0.85 * b]
-        let gap = 0.55 * b
-        let lifts = [0.0, 0.125 * b, 0.375 * b]              // bottom rise vs dot 1
-        let groupW = sides.reduce(0, +) + 2 * gap
-        let groupH = lifts[2] + sides[2]
-        let anchorX = (1 + 0.55) / 2 * viewW                 // NDC 0.55 → screen px
-        let anchorY = (1 - 0.6) / 2 * viewH                  // NDC 0.6 → screen px
-        let bottomY = anchorY + groupH / 2
-
-        var verts: [Float] = []
-        var x = anchorX - groupW / 2
-        for i in 0..<min(visible, 3) {
-            let x0 = x, x1 = x + sides[i]
-            let y1 = bottomY - lifts[i]                      // bottom (screen y down)
-            let y0 = y1 - sides[i]                           // top
-            let nx0 = Float(x0 / viewW * 2 - 1), nx1 = Float(x1 / viewW * 2 - 1)
-            let ny0 = Float(1 - y0 / viewH * 2), ny1 = Float(1 - y1 / viewH * 2)
-            verts += [nx0, ny0, nx1, ny0, nx0, ny1,
-                      nx1, ny0, nx1, ny1, nx0, ny1]
-            x = x1 + gap
-        }
-
-        encoder.setRenderPipelineState(flatPipeline)
-        if let d = shadowDeltaNDC(viewW: viewW, viewH: viewH) {
-            var shadowVerts = verts
-            for i in stride(from: 0, to: shadowVerts.count, by: 2) {
-                shadowVerts[i] += d.dx
-                shadowVerts[i + 1] += d.dy
-            }
-            var shadowColor: [Float] = [Float(d.color.r), Float(d.color.g), Float(d.color.b), 1]
-            encoder.setVertexBytes(shadowVerts, length: shadowVerts.count * MemoryLayout<Float>.size, index: 0)
-            encoder.setFragmentBytes(&shadowColor, length: 16, index: 0)
-            encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: shadowVerts.count / 2)
-        }
-        var color: [Float] = [Float(tint.r), Float(tint.g), Float(tint.b), 1]
-        encoder.setVertexBytes(verts, length: verts.count * MemoryLayout<Float>.size, index: 0)
-        encoder.setFragmentBytes(&color, length: 16, index: 0)
-        encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: verts.count / 2)
-    }
-
     /// Textured quad centered at NDC (cx, cy) with half-extents (hw, hh).
     func drawGlyphQuad(encoder: MTLRenderCommandEncoder, texture: MTLTexture,
                        center: (x: Float, y: Float), half: (w: Float, h: Float),

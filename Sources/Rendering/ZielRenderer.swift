@@ -119,9 +119,6 @@ final class ZielRenderer: NSObject, MTKViewDelegate {
             }
 
         case .thinking:
-            scenePass.drawThinkingDots(encoder: encoder, viewW: viewW, viewH: viewH,
-                                       visible: FaceAnimation.thinkingDotsVisible(at: now),
-                                       tint: scene.tint)
             // Wander intentionally suppressed while thinking — it would fight the eyes-up gesture.
             let up = FaceAnimation.eyesUpOffset(at: now)
             scenePass.drawFace(encoder: encoder, viewW: viewW, viewH: viewH,
@@ -129,6 +126,13 @@ final class ZielRenderer: NSObject, MTKViewDelegate {
                                breatheScale: FaceAnimation.breatheScale(at: now),
                                eyeBlinkScale: FaceAnimation.blinkScale(at: now),
                                eyeOffset: up)
+            let dots = FaceAnimation.thinkingDotsVisible(at: now)
+            if dots > 0 {
+                let text = [".    ", ". .  ", ". . ."][dots - 1]
+                drawText(text, encoder: encoder, viewW: viewW, viewH: viewH,
+                         cx: 0.55, cy: 0.6, maxWFrac: 0.18, maxHFrac: 0.1,
+                         tint: scene.tint, alpha: 1.0)
+            }
             if let hint = scene.hint {
                 drawText(hint, encoder: encoder, viewW: viewW, viewH: viewH,
                          cx: 0, cy: -0.72, maxWFrac: 0.5, maxHFrac: 0.09,
