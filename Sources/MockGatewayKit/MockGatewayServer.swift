@@ -12,27 +12,38 @@ public final class MockGatewayServer {
     private let queue = DispatchQueue(label: "mock-gateway")
     private var connections: [NWConnection] = []
 
-    /// When true, the server queues the sessions.subscribe response but never
-    /// sends it, proving that channel frames sent before subscription are gated.
-    private let holdSubscribeResponse: Bool
+    /// When true, the server never sends the sessions.subscribe response,
+    /// proving that channel frames sent before subscription are gated.
+    private let dropSubscribeResponse: Bool
 
     /// True once any client has sent a sessions.subscribe request.
-    /// Readable from any thread after the test polling loop completes.
-    public private(set) var didReceiveSubscribe: Bool = false
+    /// Serialized through `queue` so cross-thread reads have a happens-before edge.
+    private var _didReceiveSubscribe = false
+    public var didReceiveSubscribe: Bool { queue.sync { _didReceiveSubscribe } }
 
     /// Tracks which connections have successfully subscribed (by ObjectIdentifier).
     private var subscribedConnections: Set<ObjectIdentifier> = []
+
+    /// Connections whose scenario playback has already been kicked off, so the
+    /// deferred (subscribe-triggered) start can't double-fire.
+    private var playbackStarted: Set<ObjectIdentifier> = []
+
+    /// True if the scenario contains any channel-session frame, in which case
+    /// playback is deferred until the connection subscribes (real gateways only
+    /// stream sessions.changed / session.message to subscribers). Computed once.
+    private lazy var scenarioHasChannelFrames: Bool =
+        steps.contains { $0.frame.map(isChannelFrame) ?? false }
 
     /// Port 0 → ephemeral; read `port` after start() returns.
     public private(set) var port: UInt16 = 0
 
     public init(requestedPort: UInt16, expectToken: String? = nil,
                 requireDeviceAuth: Bool = false, steps: [MockStep],
-                holdSubscribeResponse: Bool = false) throws {
+                dropSubscribeResponse: Bool = false) throws {
         self.expectToken = expectToken
         self.requireDeviceAuth = requireDeviceAuth
         self.steps = steps
-        self.holdSubscribeResponse = holdSubscribeResponse
+        self.dropSubscribeResponse = dropSubscribeResponse
         let params = NWParameters.tcp
         let ws = NWProtocolWebSocket.Options()
         ws.autoReplyPing = true
@@ -96,7 +107,9 @@ public final class MockGatewayServer {
 
     private func prune(_ conn: NWConnection?) {
         guard let conn else { return }
-        subscribedConnections.remove(ObjectIdentifier(conn))
+        let key = ObjectIdentifier(conn)
+        subscribedConnections.remove(key)
+        playbackStarted.remove(key)
         connections.removeAll { $0 === conn }
     }
 
@@ -142,7 +155,13 @@ public final class MockGatewayServer {
                 "payload": ["type": "hello-ok", "protocol": 4,
                             "auth": ["role": role, "scopes": scopes]],
             ])
-            self.play(self.steps, on: conn)
+            // Channel scenarios wait for sessions.subscribe (see drainRequests) so
+            // the first channel frame provably arrives after the connection is
+            // subscribed — no race against the subscribe round-trip. Pure
+            // agent-stream scenarios keep their handshake-relative timeline.
+            if !self.scenarioHasChannelFrames {
+                self.startPlayback(on: conn)
+            }
             self.drainRequests(conn)
         }
     }
@@ -157,23 +176,39 @@ public final class MockGatewayServer {
                obj["type"] as? String == "req", let id = obj["id"] as? String {
                 let method = obj["method"] as? String
                 if method == "sessions.subscribe" {
-                    self.didReceiveSubscribe = true
-                    if !self.holdSubscribeResponse {
+                    // On `queue` (receiveMessage callbacks run there) — safe write.
+                    self._didReceiveSubscribe = true
+                    if !self.dropSubscribeResponse {
                         self.subscribedConnections.insert(ObjectIdentifier(conn))
                         self.send(conn, obj: [
                             "type": "res", "id": id, "ok": true,
                             "payload": ["subscribed": true],
                         ])
+                        // Now that the connection is subscribed, start the deferred
+                        // channel scenario. Anchoring the timeline here (not at
+                        // handshake) means the first channel frame can never beat
+                        // the subscribe round-trip — the gate always passes.
+                        self.startPlayback(on: conn)
                     }
-                    // holdSubscribeResponse == true: swallow the response entirely,
-                    // proving that channel frames queued before subscription are
-                    // never delivered (the connection stays in unsubscribed state).
+                    // dropSubscribeResponse == true: swallow the response entirely
+                    // AND never start playback — channel frames stay unsubscribed
+                    // and are never delivered (gating stays deterministic).
                 } else {
                     self.send(conn, obj: ["type": "res", "id": id, "ok": true, "payload": [:]])
                 }
             }
             self.drainRequests(conn)
         }
+    }
+
+    /// Kicks off scenario playback for `conn`, at most once per connection.
+    /// Called at handshake for agent-stream scenarios, or at sessions.subscribe
+    /// for channel scenarios (so the first channel frame lands post-subscribe).
+    private func startPlayback(on conn: NWConnection) {
+        let key = ObjectIdentifier(conn)
+        guard !playbackStarted.contains(key) else { return }
+        playbackStarted.insert(key)
+        play(steps, on: conn)
     }
 
     private func play(_ steps: [MockStep], on conn: NWConnection) {
@@ -185,8 +220,10 @@ public final class MockGatewayServer {
                 if step.close {
                     conn.cancel()
                 } else if let frame = step.frame {
-                    // Gate channel-session frames: only deliver if the connection
-                    // has already sent sessions.subscribe and received a response.
+                    // Defence-in-depth gate: channel scenarios only start playback
+                    // after subscribe (see startPlayback), so this normally passes;
+                    // it still guards any frame whose connection lost its
+                    // subscription mid-scenario.
                     if self.isChannelFrame(frame) &&
                        !self.subscribedConnections.contains(ObjectIdentifier(conn)) {
                         return  // drop — connection not yet subscribed
@@ -267,7 +304,7 @@ public enum MockFrames {
         ["type": "event", "event": "session.message",
          "payload": [
              "sessionKey": sessionKey,
-             "messageId": "user-msg-\(sessionKey.hashValue)",
+             "messageId": "user-msg",
              "message": ["role": "user", "content": text],
          ]]
     }
