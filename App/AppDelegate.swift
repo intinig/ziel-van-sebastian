@@ -99,6 +99,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        gateway?.stop()
+    }
+
     private func applyDebugState(director: Director, clock: () -> TimeInterval) {
         switch options.debugState {
         case "thinking":
