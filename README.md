@@ -40,7 +40,7 @@ Or override at launch (takes precedence over config):
 
     "./build/…/Ziel van Sebastian" --theme classic
 
-Any other `look` key in config acts as an override on top of the active theme — for example `"idleTint": "#ff00ff"` tints the idle state, or `"shader": { "bloomStrength": 0.8 }` dials back the bloom. Unknown theme names fail at startup and print the list of valid ones. Switching themes requires a relaunch; the config watcher hot-reloads shader parameters only.
+Any other `look` key in config acts as an override on top of the active theme — for example `"idleTint": "#ff00ff"` tints the idle state, or `"shader": { "bloomStrength": 0.8 }` cranks up the bloom. Unknown theme names fail at startup and print the list of valid ones. Switching themes requires a relaunch; the config watcher hot-reloads shader parameters only.
 
 ## Build
 
