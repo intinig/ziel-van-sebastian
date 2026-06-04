@@ -128,9 +128,12 @@ public struct ZielConfig: Codable, Equatable {
         try JSONDecoder().decode(ZielConfig.self, from: data)
     }
 
-    /// Missing or invalid file → defaults (loudly, but never fatally).
+    /// Missing or invalid file → defaults (never fatally); errors will be
+    /// logged once os.Logger wiring lands with the config watcher.
     public static func load(from url: URL) -> ZielConfig {
         guard let data = try? Data(contentsOf: url) else { return ZielConfig() }
+        // Note: a type mismatch in ANY field throws, discarding the whole file
+        // and falling back to full defaults — intentional, not per-field.
         return (try? decode(data)) ?? ZielConfig()
     }
 

@@ -31,4 +31,12 @@ final class ConfigTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: url) }
         XCTAssertEqual(ZielConfig.load(from: url), ZielConfig())
     }
+
+    func testNestedShaderPartialMerge() throws {
+        let json = #"{"look":{"shader":{"scanlineIntensity":0.99}}}"#
+        let c = try ZielConfig.decode(Data(json.utf8))
+        XCTAssertEqual(c.look.shader.scanlineIntensity, 0.99)
+        XCTAssertEqual(c.look.shader.persistence, 0.82, accuracy: 0.001)  // default survives
+        XCTAssertEqual(c.look.idleTint, "#41ff6a")  // outer default survives too
+    }
 }
