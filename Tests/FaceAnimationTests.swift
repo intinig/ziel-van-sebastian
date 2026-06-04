@@ -29,12 +29,6 @@ final class FaceAnimationTests: XCTestCase {
         }
     }
 
-    func testSweepLoopsZeroToOne() {
-        XCTAssertEqual(FaceAnimation.sweepY(at: 0), 0, accuracy: 0.01)
-        XCTAssertEqual(FaceAnimation.sweepY(at: 1.4), 0.5, accuracy: 0.01)
-        XCTAssertEqual(FaceAnimation.sweepY(at: 2.8), 0, accuracy: 0.01)
-    }
-
     func testThinkingDotsAppearOneByOne() {
         // 2s cycle, hard steps: blank, 1, 2, 3, blank.
         XCTAssertEqual(FaceAnimation.thinkingDotsVisible(at: 0.0), 0)   // p = 0.0

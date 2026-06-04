@@ -119,9 +119,9 @@ final class ZielRenderer: NSObject, MTKViewDelegate {
             }
 
         case .thinking:
-            scenePass.drawSweep(encoder: encoder,
-                                y: FaceAnimation.sweepY(at: now),
-                                tint: scene.tint, intensity: 0.10)
+            scenePass.drawThinkingDots(encoder: encoder, viewW: viewW, viewH: viewH,
+                                       visible: FaceAnimation.thinkingDotsVisible(at: now),
+                                       tint: scene.tint)
             // Wander intentionally suppressed while thinking — it would fight the eyes-up gesture.
             let up = FaceAnimation.eyesUpOffset(at: now)
             scenePass.drawFace(encoder: encoder, viewW: viewW, viewH: viewH,
