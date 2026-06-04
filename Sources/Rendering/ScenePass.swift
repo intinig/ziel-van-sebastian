@@ -6,13 +6,16 @@ final class ScenePass {
     private let device: MTLDevice
     private let flatPipeline: MTLRenderPipelineState
     private let texPipeline: MTLRenderPipelineState
+    private let shadow: ShadowSpec?
 
     struct TexQuadVertex {
         var x, y, u, v: Float
     }
 
-    init(device: MTLDevice, library: MTLLibrary, pixelFormat: MTLPixelFormat) throws {
+    init(device: MTLDevice, library: MTLLibrary, pixelFormat: MTLPixelFormat,
+         shadow: ShadowSpec?) throws {
         self.device = device
+        self.shadow = shadow
 
         func makePipeline(vertex: String, fragment: String) throws -> MTLRenderPipelineState {
             let desc = MTLRenderPipelineDescriptor()
@@ -45,6 +48,17 @@ final class ScenePass {
             originX = ((viewW - gridPixel * Double(FaceGeometry.gridWidth)) / 2).rounded()
             originY = ((viewH - gridPixel * Double(FaceGeometry.gridHeight)) / 2).rounded()
         }
+    }
+
+    /// Shadow offset in NDC for the current view size, plus the shadow color.
+    /// Offsets are face-grid pixels; NDC spans 2.0 across the view; screen y
+    /// grows down while NDC y grows up — hence the negated dy.
+    private func shadowDeltaNDC(viewW: Double, viewH: Double) -> (dx: Float, dy: Float, color: ColorRGB)? {
+        guard let s = shadow else { return nil }
+        let gp = FaceTransform(viewW: viewW, viewH: viewH).gridPixel
+        return (dx: Float(s.offsetX * gp / viewW * 2),
+                dy: Float(-(s.offsetY * gp / viewH * 2)),
+                color: s.color)
     }
 
     /// offsets in grid units; scales are multipliers around centers.
@@ -100,8 +114,19 @@ final class ScenePass {
                       nx1, ny0, nx1, ny1, nx0, ny1]
         }
 
-        var color: [Float] = [Float(tint.r), Float(tint.g), Float(tint.b), Float(alpha)]
         encoder.setRenderPipelineState(flatPipeline)
+        if let d = shadowDeltaNDC(viewW: viewW, viewH: viewH) {
+            var shadowVerts = verts
+            for i in stride(from: 0, to: shadowVerts.count, by: 2) {
+                shadowVerts[i] += d.dx
+                shadowVerts[i + 1] += d.dy
+            }
+            var shadowColor: [Float] = [Float(d.color.r), Float(d.color.g), Float(d.color.b), Float(alpha)]
+            encoder.setVertexBytes(shadowVerts, length: shadowVerts.count * MemoryLayout<Float>.size, index: 0)
+            encoder.setFragmentBytes(&shadowColor, length: 16, index: 0)
+            encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: shadowVerts.count / 2)
+        }
+        var color: [Float] = [Float(tint.r), Float(tint.g), Float(tint.b), Float(alpha)]
         encoder.setVertexBytes(verts, length: verts.count * MemoryLayout<Float>.size, index: 0)
         encoder.setFragmentBytes(&color, length: 16, index: 0)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: verts.count / 2)
@@ -126,7 +151,20 @@ final class ScenePass {
     /// Textured quad centered at NDC (cx, cy) with half-extents (hw, hh).
     func drawGlyphQuad(encoder: MTLRenderCommandEncoder, texture: MTLTexture,
                        center: (x: Float, y: Float), half: (w: Float, h: Float),
-                       tint: ColorRGB, alpha: Double) {
+                       tint: ColorRGB, alpha: Double,
+                       viewW: Double, viewH: Double) {
+        if let d = shadowDeltaNDC(viewW: viewW, viewH: viewH) {
+            emitGlyphQuad(encoder: encoder, texture: texture,
+                          center: (x: center.x + d.dx, y: center.y + d.dy), half: half,
+                          rgba: [Float(d.color.r), Float(d.color.g), Float(d.color.b), Float(alpha)])
+        }
+        emitGlyphQuad(encoder: encoder, texture: texture, center: center, half: half,
+                      rgba: [Float(tint.r), Float(tint.g), Float(tint.b), Float(alpha)])
+    }
+
+    private func emitGlyphQuad(encoder: MTLRenderCommandEncoder, texture: MTLTexture,
+                               center: (x: Float, y: Float), half: (w: Float, h: Float),
+                               rgba: [Float]) {
         // Texture v=0 is the TOP of the glyph (Metal texture origin top-left), while NDC y grows upward — hence v flipped relative to y.
         let v: [TexQuadVertex] = [
             .init(x: center.x - half.w, y: center.y - half.h, u: 0, v: 1),
@@ -136,7 +174,7 @@ final class ScenePass {
             .init(x: center.x + half.w, y: center.y + half.h, u: 1, v: 0),
             .init(x: center.x - half.w, y: center.y + half.h, u: 0, v: 0),
         ]
-        var color: [Float] = [Float(tint.r), Float(tint.g), Float(tint.b), Float(alpha)]
+        var color = rgba
         encoder.setRenderPipelineState(texPipeline)
         encoder.setVertexBytes(v, length: v.count * MemoryLayout<TexQuadVertex>.stride, index: 0)
         encoder.setFragmentTexture(texture, index: 0)

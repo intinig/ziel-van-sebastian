@@ -22,7 +22,8 @@ final class ZielRenderer: NSObject, MTKViewDelegate {
         self.device = device
         self.queue = device.makeCommandQueue()!
         let library = try device.makeDefaultLibrary(bundle: .main)
-        self.scenePass = try ScenePass(device: device, library: library, pixelFormat: pixelFormat)
+        self.scenePass = try ScenePass(device: device, library: library,
+                                       pixelFormat: pixelFormat, shadow: look.shadow)
         self.glyphs = GlyphRasterizer(device: device, fontName: look.fontName)
         self.crt = try CRTPipeline(device: device, library: library,
                                    drawableFormat: pixelFormat, shaderConfig: look.shader)
@@ -79,7 +80,8 @@ final class ZielRenderer: NSObject, MTKViewDelegate {
         let halfH = Float(texH * fit / viewH)
         scenePass.drawGlyphQuad(encoder: encoder, texture: tex,
                                 center: (x: cx, y: cy), half: (w: halfW, h: halfH),
-                                tint: tint, alpha: alpha)
+                                tint: tint, alpha: alpha,
+                                viewW: viewW, viewH: viewH)
     }
 
     /// Task 11: static face. Animations layer in over Tasks 12–13.
