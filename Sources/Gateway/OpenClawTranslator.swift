@@ -154,9 +154,8 @@ public enum OpenClawTranslator {
             return [.textDelta(run: runId, session: sessionKey, text: text)]
         } else {
             // No active run (message arrived without a preceding sessions.changed) —
-            // synthesise a self-contained run keyed by messageId.
-            let messageId = (payload["messageId"] as? String) ?? sessionKey
-            let run = messageId.isEmpty ? sessionKey : messageId
+            // synthesise a self-contained run keyed by messageId (sessionKey fallback).
+            let run = (payload["messageId"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? sessionKey
             return [
                 .runStarted(run: run, session: sessionKey),
                 .textDelta(run: run, session: sessionKey, text: text),

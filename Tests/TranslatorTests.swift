@@ -172,8 +172,6 @@ final class TranslatorTests: XCTestCase {
         XCTAssertEqual(translate(empty, context: &ctx), [])
     }
 
-    // Case 9 is covered — all existing tests above still use the single-arg translate(), unchanged.
-
     // Case 10: Multiple text blocks join with "\n".
     func testMultipleTextBlocksJoinedWithNewline() {
         var ctx = TranslationContext()
@@ -182,5 +180,34 @@ final class TranslatorTests: XCTestCase {
         let json = #"{"type":"event","event":"session.message","payload":{"sessionKey":"agent:main:whatsapp:direct:+353838112174","agentId":"main","messageId":"abc","messageSeq":1,"message":{"role":"assistant","content":[{"type":"text","text":"First"},{"type":"thinking","thinking":"..."},{"type":"text","text":"Second"}],"timestamp":1}}}"#
         let events = translate(json, context: &ctx)
         XCTAssertEqual(events, [.textDelta(run: "run-multi", session: sessionKey, text: "First\nSecond")])
+    }
+
+    // A second changed(start) for the same sessionKey with a different runId
+    // overwrites the map entry; a following assistant message attaches to the NEW run.
+    func testDuplicateStartOverwritesRunId() {
+        var ctx = TranslationContext()
+        let sessionKey = "agent:main:whatsapp:direct:+353838112174"
+        let firstStart = #"{"type":"event","event":"sessions.changed","payload":{"sessionKey":"agent:main:whatsapp:direct:+353838112174","phase":"start","runId":"run-old","ts":1,"session":{}}}"#
+        let secondStart = #"{"type":"event","event":"sessions.changed","payload":{"sessionKey":"agent:main:whatsapp:direct:+353838112174","phase":"start","runId":"run-new","ts":2,"session":{}}}"#
+        let assistantMsg = #"{"type":"event","event":"session.message","payload":{"sessionKey":"agent:main:whatsapp:direct:+353838112174","agentId":"main","messageId":"m1","messageSeq":1,"message":{"role":"assistant","content":[{"type":"text","text":"Hi"}],"timestamp":3}}}"#
+
+        XCTAssertEqual(translate(firstStart, context: &ctx),
+                       [.runStarted(run: "run-old", session: sessionKey)])
+        XCTAssertEqual(translate(secondStart, context: &ctx),
+                       [.runStarted(run: "run-new", session: sessionKey)])
+        XCTAssertEqual(ctx.activeChannelRuns[sessionKey], "run-new")
+        XCTAssertEqual(translate(assistantMsg, context: &ctx),
+                       [.textDelta(run: "run-new", session: sessionKey, text: "Hi")])
+    }
+
+    // changed(error) closes the run like "end": emits runEnded and clears the map entry.
+    func testSessionsChangedErrorProducesRunEndedAndClearsMap() {
+        var ctx = TranslationContext()
+        let sessionKey = "agent:main:whatsapp:direct:+353838112174"
+        ctx.activeChannelRuns[sessionKey] = "run-err"
+        let json = #"{"type":"event","event":"sessions.changed","payload":{"sessionKey":"agent:main:whatsapp:direct:+353838112174","phase":"error","runId":"run-err","ts":1,"session":{}}}"#
+        let events = translate(json, context: &ctx)
+        XCTAssertEqual(events, [.runEnded(run: "run-err", session: sessionKey)])
+        XCTAssertNil(ctx.activeChannelRuns[sessionKey])
     }
 }
