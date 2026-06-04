@@ -3,6 +3,7 @@
 .env.*
 config.json
 output.log
+scripts/deploy.sh
 
 # Session/tooling state
 .superpowers/
