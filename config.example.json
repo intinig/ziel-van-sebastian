@@ -20,6 +20,7 @@
     "fontName": "Menlo-Bold",
     "shader": {
       "scanlineIntensity": 0.35,
+      "scanlinePitch": 3,
       "maskIntensity": 0.25,
       "bloomStrength": 0.55,
       "curvature": 0.12,

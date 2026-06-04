@@ -3,9 +3,10 @@ import MetalKit
 /// Owns the offscreen textures and post-process passes:
 /// sceneTex → persist (ping-pong) → bright → blurH → blurV → composite.
 final class CRTPipeline {
-    /// MUST match the Metal CRTParams layout field-for-field (incl. pad0).
+    /// MUST match the Metal CRTParams layout field-for-field (incl. pad0, pad1).
     struct Params {
         var scanlineIntensity: Float
+        var scanlinePitch: Float
         var maskIntensity: Float
         var bloomStrength: Float
         var curvature: Float
@@ -15,10 +16,12 @@ final class CRTPipeline {
         var persistence: Float
         var time: Float
         var pad0: Float = 0
+        var pad1: Float = 0
         var resolution: SIMD2<Float>
 
         init(_ c: ShaderConfig, time: Float, resolution: SIMD2<Float>) {
             scanlineIntensity = Float(c.scanlineIntensity)
+            scanlinePitch = Float(c.scanlinePitch)
             maskIntensity = Float(c.maskIntensity)
             bloomStrength = Float(c.bloomStrength)
             curvature = Float(c.curvature)
@@ -55,7 +58,7 @@ final class CRTPipeline {
 
     init(device: MTLDevice, library: MTLLibrary,
          drawableFormat: MTLPixelFormat, shaderConfig: ShaderConfig) throws {
-        assert(MemoryLayout<Params>.stride == 48, "CRTParams layout drifted from Metal struct")
+        assert(MemoryLayout<Params>.stride == 56, "CRTParams layout drifted from Metal struct")
         self.device = device
         self.shaderConfig = shaderConfig
 

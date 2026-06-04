@@ -48,6 +48,7 @@ fragment float4 texquad_fragment(V2F in [[stage_in]],
 
 struct CRTParams {
     float scanlineIntensity;
+    float scanlinePitch;
     float maskIntensity;
     float bloomStrength;
     float curvature;
@@ -57,6 +58,7 @@ struct CRTParams {
     float persistence;
     float time;
     float pad0;                // keep float2 aligned identically in Swift+MSL
+    float pad1;
     float2 resolution;
 };
 
@@ -141,8 +143,8 @@ fragment float4 composite_fragment(V2F in [[stage_in]],
     float3 color = phosphor.sample(s, uv).rgb;
     color += bloom.sample(s, uv).rgb * p.bloomStrength;
 
-    // Scanlines: one dark line per ~3 output pixels.
-    float line = sin(uv.y * p.resolution.y * 1.047);
+    // Scanlines: period controlled by scanlinePitch (output pixels per half-period).
+    float line = sin(uv.y * p.resolution.y * (3.14159265 / max(p.scanlinePitch, 1.0)));
     color *= 1.0 - p.scanlineIntensity * (0.5 + 0.5 * line);
 
     // Aperture grille: RGB triads across x.

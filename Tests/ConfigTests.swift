@@ -8,6 +8,7 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(c.look.idleTint, "#41ff6a")
         XCTAssertEqual(c.behavior.dozeAfterSeconds, 600)
         XCTAssertEqual(c.look.shader.persistence, 0.82, accuracy: 0.001)
+        XCTAssertEqual(c.look.shader.scanlinePitch, 3, accuracy: 0.001)
     }
 
     func testPartialJSONMergesWithDefaults() throws {

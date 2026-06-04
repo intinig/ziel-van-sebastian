@@ -38,6 +38,7 @@ public struct PacingConfig: Codable, Equatable {
 
 public struct ShaderConfig: Codable, Equatable {
     public var scanlineIntensity: Double = 0.35
+    public var scanlinePitch: Double = 3
     public var maskIntensity: Double = 0.25
     public var bloomStrength: Double = 0.55
     public var curvature: Double = 0.12
@@ -50,6 +51,7 @@ public struct ShaderConfig: Codable, Equatable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         scanlineIntensity = try c.decodeIfPresent(Double.self, forKey: .scanlineIntensity) ?? scanlineIntensity
+        scanlinePitch = try c.decodeIfPresent(Double.self, forKey: .scanlinePitch) ?? scanlinePitch
         maskIntensity = try c.decodeIfPresent(Double.self, forKey: .maskIntensity) ?? maskIntensity
         bloomStrength = try c.decodeIfPresent(Double.self, forKey: .bloomStrength) ?? bloomStrength
         curvature = try c.decodeIfPresent(Double.self, forKey: .curvature) ?? curvature
