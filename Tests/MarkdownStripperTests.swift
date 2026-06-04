@@ -39,4 +39,14 @@ final class MarkdownStripperTests: XCTestCase {
     func testFlushClosesPendingBacktickRun() {
         XCTAssertEqual(strip(["text ``"]), "text ")
     }
+
+    func testPlainParensKept() {
+        XCTAssertEqual(strip(["cost (in USD) today"]), "cost (in USD) today")
+    }
+
+    func testConsecutiveFences() {
+        XCTAssertEqual(
+            strip(["a\n```\nhide\n```\nmid\n```\nhide2\n```\nz"]),
+            "a\n [code] \nmid\n [code] \nz")
+    }
 }

@@ -2,6 +2,8 @@ import Foundation
 
 /// Character-level streaming markdown remover. Safe across arbitrary chunk
 /// boundaries: backtick runs and link URLs may span feeds.
+/// One-shot per agent run — the Director must create a fresh instance for
+/// each run (state, including an unclosed fence, persists after flush()).
 public final class MarkdownStreamStripper {
     private var inFence = false
     private var inURL = false           // between "](" and ")"
@@ -45,8 +47,8 @@ public final class MarkdownStreamStripper {
             case "#" where atLineStart:
                 continue
             case " " where atLineStart:
-                // swallow the single space after heading #'s; harmless otherwise
-                // (leading spaces at line start are not significant for RSVP)
+                // Drop leading whitespace at line start (covers the post-# space
+                // and indented lines — neither is meaningful for RSVP).
                 continue
             case "\n":
                 atLineStart = true
