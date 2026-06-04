@@ -19,5 +19,7 @@ final class HintMapperTests: XCTestCase {
 
     func testLongUnknownToolTruncated() {
         XCTAssertEqual(HintMapper.hint(forTool: "sessions_spawn_subagent"), "SESSIONS_SPA…")
+        // Exactly 12 chars: no truncation, just the ellipsis.
+        XCTAssertEqual(HintMapper.hint(forTool: "123456789012"), "123456789012…")
     }
 }
