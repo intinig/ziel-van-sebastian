@@ -130,6 +130,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             director.handle(.runStarted(run: "dbg", session: "dbg"), now: clock())
             director.handle(.textDelta(run: "dbg", session: "dbg",
                 text: "The build finished. All 142 tests pass. Deploy went clean. Want me to tag the release? "), now: clock())
+        case "idle":
+            break  // connectionUp (sent by the caller) already lands on idle
         default:
             if let s = options.debugState { fputs("warning: unknown --state '\(s)'\n", stderr) }
         }
