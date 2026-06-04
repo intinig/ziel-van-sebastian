@@ -1,0 +1,15 @@
+# Secrets — never commit
+.env
+.env.*
+config.json
+
+# Session/tooling state
+.superpowers/
+.remember/
+.DS_Store
+
+# Build artifacts
+build/
+DerivedData/
+*.xcodeproj
+.swiftpm/
