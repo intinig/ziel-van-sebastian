@@ -25,7 +25,9 @@ public final class GatewayClient: NSObject, URLSessionWebSocketDelegate {
     private var authRejected = false
     /// Whether the current connection's drop has already been reported to the caller.
     private var dropReported = false
+    private var translationContext = TranslationContext()
     private static let connectId = "connect-1"
+    private static let subscribeId = "subscribe-1"
 
     public init(url: URL, token: String, identity: DeviceIdentity? = nil,
                 onEvent: @escaping (AgentEvent) -> Void) {
@@ -65,6 +67,7 @@ public final class GatewayClient: NSObject, URLSessionWebSocketDelegate {
         handshakeComplete = false
         authRejected = false
         dropReported = false
+        translationContext = TranslationContext()
         let t = session.webSocketTask(with: url)
         task = t
         t.resume()
@@ -129,6 +132,25 @@ public final class GatewayClient: NSObject, URLSessionWebSocketDelegate {
             if let error {
                 self?.log.error("connect send failed: \(error.localizedDescription)")
                 self?.queue.async { self?.handleDrop() }
+            }
+        }
+    }
+
+    private func sendSessionsSubscribe() {
+        // Subscribe to all sessions so channel runs (WhatsApp, iMessage, etc.)
+        // surface as sessions.changed / session.message events.
+        // Empty params = subscribe to all sessions. Re-sent on every reconnect.
+        let frame: [String: Any] = [
+            "type": "req", "id": Self.subscribeId,
+            "method": "sessions.subscribe", "params": [:] as [String: Any],
+        ]
+        // Literal dictionary — serialisation cannot fail.
+        let data = try! JSONSerialization.data(withJSONObject: frame)
+        task?.send(.string(String(decoding: data, as: UTF8.self))) { [weak self] error in
+            if let error {
+                // A send failure here is non-fatal: the drop handler will fire if
+                // the socket is actually dead; otherwise we just won't see channels.
+                self?.log.error("sessions.subscribe send failed: \(error.localizedDescription)")
             }
         }
     }
@@ -205,6 +227,15 @@ public final class GatewayClient: NSObject, URLSessionWebSocketDelegate {
                 let auth = payload?["auth"] as? [String: Any]
                 let negotiatedScopes = (auth?["scopes"] as? [String]) ?? []
                 log.info("gateway handshake ok (role=\(auth?["role"] as? String ?? "?"), scopes=\(negotiatedScopes))")
+                // Pull mainSessionKey from snapshot so channel events for the main
+                // session are not double-spoken (agent events already cover them).
+                let snapshot = payload?["snapshot"] as? [String: Any]
+                let health = snapshot?["health"] as? [String: Any]
+                let sessionDefaults = health?["sessionDefaults"] as? [String: Any]
+                if let key = sessionDefaults?["mainSessionKey"] as? String, !key.isEmpty {
+                    translationContext.mainSessionKey = key
+                }
+                sendSessionsSubscribe()
                 onEvent(.connectionUp)
             } else {
                 let error = obj["error"] as? [String: Any]
@@ -219,7 +250,7 @@ public final class GatewayClient: NSObject, URLSessionWebSocketDelegate {
             }
             return
         }
-        for event in OpenClawTranslator.translate(data) {
+        for event in OpenClawTranslator.translate(data, context: &translationContext) {
             onEvent(event)
         }
     }
