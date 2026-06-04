@@ -96,7 +96,8 @@ The probe uses the same identity and auth path as the app; if it reports
 |---|---|
 | `--window` | 960×540 window instead of claiming a display |
 | `--demo` | looping scripted lifecycle, no gateway |
-| `--state thinking\|speaking\|offline` | jump to a state for tuning |
+| `--theme <name>` | select a look theme (`hello`, `classic`), overrides config |
+| `--state idle\|thinking\|speaking\|offline` | jump to a state for tuning |
 | `--config <path>` | alternate config file |
 | `--install-login-item` | register for launch at login |
 
