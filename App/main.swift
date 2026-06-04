@@ -16,7 +16,12 @@ struct RunOptions {
             case "--install-login-item": o.installLoginItem = true
             case "--config":
                 i += 1
-                if i < args.count { o.configPath = args[i] }
+                if i < args.count {
+                    o.configPath = args[i]
+                } else {
+                    fputs("error: --config requires a path argument\n", stderr)
+                    exit(1)
+                }
             case "--version":
                 print("ziel-van-sebastian 0.1.0")
                 exit(0)
