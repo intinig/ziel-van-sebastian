@@ -12,14 +12,27 @@ public final class MockGatewayServer {
     private let queue = DispatchQueue(label: "mock-gateway")
     private var connections: [NWConnection] = []
 
+    /// When true, the server queues the sessions.subscribe response but never
+    /// sends it, proving that channel frames sent before subscription are gated.
+    private let holdSubscribeResponse: Bool
+
+    /// True once any client has sent a sessions.subscribe request.
+    /// Readable from any thread after the test polling loop completes.
+    public private(set) var didReceiveSubscribe: Bool = false
+
+    /// Tracks which connections have successfully subscribed (by ObjectIdentifier).
+    private var subscribedConnections: Set<ObjectIdentifier> = []
+
     /// Port 0 → ephemeral; read `port` after start() returns.
     public private(set) var port: UInt16 = 0
 
     public init(requestedPort: UInt16, expectToken: String? = nil,
-                requireDeviceAuth: Bool = false, steps: [MockStep]) throws {
+                requireDeviceAuth: Bool = false, steps: [MockStep],
+                holdSubscribeResponse: Bool = false) throws {
         self.expectToken = expectToken
         self.requireDeviceAuth = requireDeviceAuth
         self.steps = steps
+        self.holdSubscribeResponse = holdSubscribeResponse
         let params = NWParameters.tcp
         let ws = NWProtocolWebSocket.Options()
         ws.autoReplyPing = true
@@ -83,6 +96,7 @@ public final class MockGatewayServer {
 
     private func prune(_ conn: NWConnection?) {
         guard let conn else { return }
+        subscribedConnections.remove(ObjectIdentifier(conn))
         connections.removeAll { $0 === conn }
     }
 
@@ -134,12 +148,29 @@ public final class MockGatewayServer {
     }
 
     /// Answer any post-connect requests generically so clients don't hang.
+    /// sessions.subscribe requests get a proper subscribed:true response and
+    /// mark the connection as subscribed (enabling channel-session frame delivery).
     private func drainRequests(_ conn: NWConnection) {
         conn.receiveMessage { [weak self] data, _, _, error in
             guard let self, error == nil, let data else { return }
             if let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
                obj["type"] as? String == "req", let id = obj["id"] as? String {
-                self.send(conn, obj: ["type": "res", "id": id, "ok": true, "payload": [:]])
+                let method = obj["method"] as? String
+                if method == "sessions.subscribe" {
+                    self.didReceiveSubscribe = true
+                    if !self.holdSubscribeResponse {
+                        self.subscribedConnections.insert(ObjectIdentifier(conn))
+                        self.send(conn, obj: [
+                            "type": "res", "id": id, "ok": true,
+                            "payload": ["subscribed": true],
+                        ])
+                    }
+                    // holdSubscribeResponse == true: swallow the response entirely,
+                    // proving that channel frames queued before subscription are
+                    // never delivered (the connection stays in unsubscribed state).
+                } else {
+                    self.send(conn, obj: ["type": "res", "id": id, "ok": true, "payload": [:]])
+                }
             }
             self.drainRequests(conn)
         }
@@ -150,15 +181,33 @@ public final class MockGatewayServer {
         for step in steps {
             when = when + .milliseconds(step.delayMs)
             queue.asyncAfter(deadline: when) { [weak self] in
+                guard let self else { return }
                 if step.close {
                     conn.cancel()
                 } else if let frame = step.frame {
-                    self?.sendData(conn, frame)
+                    // Gate channel-session frames: only deliver if the connection
+                    // has already sent sessions.subscribe and received a response.
+                    if self.isChannelFrame(frame) &&
+                       !self.subscribedConnections.contains(ObjectIdentifier(conn)) {
+                        return  // drop — connection not yet subscribed
+                    }
+                    self.sendData(conn, frame)
                 } else if let raw = step.raw {
-                    self?.sendData(conn, Data(raw.utf8))
+                    self.sendData(conn, Data(raw.utf8))
                 }
             }
         }
+    }
+
+    /// Returns true if `data` is a channel-session frame (`sessions.changed` or
+    /// `session.message` event) that should be gated behind subscription.
+    private func isChannelFrame(_ data: Data) -> Bool {
+        guard
+            let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+            obj["type"] as? String == "event",
+            let eventName = obj["event"] as? String
+        else { return false }
+        return eventName == "sessions.changed" || eventName == "session.message"
     }
 
     private func send(_ conn: NWConnection, obj: [String: Any]) {
@@ -200,5 +249,44 @@ public enum MockFrames {
         ["type": "event", "event": "agent",
          "payload": ["runId": run, "seq": seq, "stream": stream,
                      "ts": 0, "sessionKey": session, "data": data]]
+    }
+
+    // MARK: - Channel-session frames
+
+    /// `sessions.changed` event: the gateway notifies that a channel run started or ended.
+    public static func sessionsChanged(sessionKey: String, phase: String,
+                                       runId: String) -> [String: Any] {
+        ["type": "event", "event": "sessions.changed",
+         "payload": ["sessionKey": sessionKey, "phase": phase,
+                     "runId": runId, "ts": 0]]
+    }
+
+    /// `session.message` event with a user-role plain-string message.
+    /// The client drops user messages, so this is useful for gating / ordering tests.
+    public static func sessionMessageUser(sessionKey: String, text: String) -> [String: Any] {
+        ["type": "event", "event": "session.message",
+         "payload": [
+             "sessionKey": sessionKey,
+             "messageId": "user-msg-\(sessionKey.hashValue)",
+             "message": ["role": "user", "content": text],
+         ]]
+    }
+
+    /// `session.message` event with an assistant-role block-array message.
+    /// Produces a thinking block (when non-nil) followed by a text block.
+    public static func sessionMessageAssistant(sessionKey: String, messageId: String,
+                                               thinking: String?,
+                                               text: String) -> [String: Any] {
+        var blocks: [[String: Any]] = []
+        if let thinking {
+            blocks.append(["type": "thinking", "thinking": thinking])
+        }
+        blocks.append(["type": "text", "text": text])
+        return ["type": "event", "event": "session.message",
+                "payload": [
+                    "sessionKey": sessionKey,
+                    "messageId": messageId,
+                    "message": ["role": "assistant", "content": blocks],
+                ]]
     }
 }

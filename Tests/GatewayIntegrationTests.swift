@@ -182,4 +182,112 @@ final class GatewayIntegrationTests: XCTestCase {
         }
         XCTAssertEqual(collector.snapshot().first, .connectionDown(auth: true))
     }
+
+    // MARK: - Channel-session events (sessions.subscribe + channel frames)
+
+    func testChannelSessionEndToEnd() throws {
+        let sessionKey = "agent:main:whatsapp:direct:+353838112174"
+        let runId = "whatsapp-run-1"
+
+        // Build the WhatsApp scenario steps — all channel frames, no agent frames.
+        let channelSteps: [MockStep] = [
+            .send(MockFrames.sessionsChanged(sessionKey: sessionKey, phase: "start", runId: runId),
+                  afterMs: 50),
+            .send(MockFrames.sessionMessageUser(sessionKey: sessionKey, text: "Hey Seb"),
+                  afterMs: 50),
+            .send(MockFrames.sessionMessageAssistant(
+                sessionKey: sessionKey, messageId: "msg-1",
+                thinking: "The user greeted me.",
+                text: "Hello Giovanni! Appliance relay working perfectly."),
+                  afterMs: 50),
+            .send(MockFrames.sessionsChanged(sessionKey: sessionKey, phase: "end", runId: runId),
+                  afterMs: 50),
+        ]
+
+        let server = try MockGatewayServer(requestedPort: 0, expectToken: "tok",
+                                           steps: channelSteps)
+        try server.start()
+        defer { server.stop() }
+
+        let collector = Collector()
+        let client = makeClient(port: server.port, collector: collector)
+        client.start()
+        defer { client.stop() }
+
+        // Wait for runEnded — the last expected event.
+        let expectedRunEnded = AgentEvent.runEnded(run: runId, session: sessionKey)
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline && !collector.snapshot().contains(expectedRunEnded) {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+
+        // Give a brief window for any spurious extra events to arrive.
+        RunLoop.current.run(until: Date().addingTimeInterval(0.15))
+        let events = collector.snapshot()
+
+        // Assert the mock received a sessions.subscribe request.
+        XCTAssertTrue(server.didReceiveSubscribe,
+                      "GatewayClient must send sessions.subscribe after handshake")
+
+        // Assert events in order (strip connection-lifecycle events).
+        let nonConnection = events.filter {
+            if case .connectionUp = $0 { return false }
+            if case .connectionDown = $0 { return false }
+            return true
+        }
+        XCTAssertEqual(nonConnection, [
+            .runStarted(run: runId, session: sessionKey),
+            .textDelta(run: runId, session: sessionKey,
+                       text: "Hello Giovanni! Appliance relay working perfectly."),
+            .runEnded(run: runId, session: sessionKey),
+        ])
+        XCTAssertEqual(events.first, .connectionUp)
+    }
+
+    func testChannelFramesGatedUntilSubscribe() throws {
+        // Channel frames played before the subscribe response is sent must NOT
+        // reach the client. We achieve determinism by using a server that holds
+        // the subscribe response until we explicitly release it, rather than
+        // relying on timing.
+        let sessionKey = "agent:main:whatsapp:direct:+353838112174"
+        let runId = "gated-run-1"
+
+        // These steps are delivered immediately after handshake — before subscribe.
+        // They must be silently discarded because the connection hasn't subscribed yet.
+        let preSubscribeSteps: [MockStep] = [
+            .send(MockFrames.sessionsChanged(sessionKey: sessionKey, phase: "start", runId: runId),
+                  afterMs: 10),
+            .send(MockFrames.sessionsChanged(sessionKey: sessionKey, phase: "end", runId: runId),
+                  afterMs: 20),
+        ]
+
+        let server = try MockGatewayServer(requestedPort: 0, expectToken: "tok",
+                                           steps: preSubscribeSteps,
+                                           holdSubscribeResponse: true)
+        try server.start()
+        defer { server.stop() }
+
+        let collector = Collector()
+        let client = makeClient(port: server.port, collector: collector)
+        client.start()
+        defer { client.stop() }
+
+        // Wait for connectionUp and give time for the pre-subscribe frames to arrive.
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline && !collector.snapshot().contains(.connectionUp) {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        // Let pre-subscribe frames travel over the wire and be processed.
+        RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+
+        // No channel events may have arrived — they were sent before subscription.
+        let earlyEvents = collector.snapshot().filter {
+            switch $0 {
+            case .runStarted, .runEnded, .textDelta, .toolStarted: return true
+            default: return false
+            }
+        }
+        XCTAssertTrue(earlyEvents.isEmpty,
+                      "Channel frames before subscribe must be gated; got: \(earlyEvents)")
+    }
 }
