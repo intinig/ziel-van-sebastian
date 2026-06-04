@@ -1,3 +1,4 @@
+import AppKit
 import CoreText
 import Metal
 
@@ -27,7 +28,9 @@ final class GlyphRasterizer {
         let font = CTFontCreateWithName(fontName as CFString, pointSize, nil)
         var attrs: [NSAttributedString.Key: Any] = [
             .font: font,
-            .foregroundColor: CGColor(gray: 1, alpha: 1),
+            // CT-native key — .foregroundColor ("NSColor") only works via an
+            // undocumented AppKit bridge; this one is the documented contract.
+            NSAttributedString.Key(kCTForegroundColorAttributeName as String): CGColor(gray: 1, alpha: 1),
         ]
         if kern > 0 { attrs[.kern] = kern }
         let attributed = NSAttributedString(string: text, attributes: attrs)
