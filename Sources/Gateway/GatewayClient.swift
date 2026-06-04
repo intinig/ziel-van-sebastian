@@ -8,6 +8,10 @@ import os
 public final class GatewayClient: NSObject, URLSessionWebSocketDelegate {
     private let url: URL
     private let token: String
+    /// Persistent Ed25519 identity for device pairing. nil = legacy token-only
+    /// connect (no device block; the gateway clears scopes — tests/probes only).
+    private let identity: DeviceIdentity?
+    private var challengeTimeout: DispatchWorkItem?
     private let onEvent: (AgentEvent) -> Void
     private let log = Logger(subsystem: "com.gintini.ZielVanSebastian", category: "gateway")
     private let queue = DispatchQueue(label: "gateway-client")
@@ -23,9 +27,11 @@ public final class GatewayClient: NSObject, URLSessionWebSocketDelegate {
     private var dropReported = false
     private static let connectId = "connect-1"
 
-    public init(url: URL, token: String, onEvent: @escaping (AgentEvent) -> Void) {
+    public init(url: URL, token: String, identity: DeviceIdentity? = nil,
+                onEvent: @escaping (AgentEvent) -> Void) {
         self.url = url
         self.token = token
+        self.identity = identity
         self.onEvent = onEvent
         super.init()
         let config = URLSessionConfiguration.default
@@ -43,6 +49,8 @@ public final class GatewayClient: NSObject, URLSessionWebSocketDelegate {
     public func stop() {
         queue.async {
             self.stopped = true
+            self.challengeTimeout?.cancel()
+            self.challengeTimeout = nil
             self.task?.cancel(with: .normalClosure, reason: nil)
             self.task = nil
             // Break the URLSession→delegate retain cycle so the client deallocates.
@@ -65,7 +73,15 @@ public final class GatewayClient: NSObject, URLSessionWebSocketDelegate {
 
     public func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask,
                            didOpenWithProtocol protocol: String?) {
-        queue.async { self.sendConnect() }
+        queue.async {
+            if self.identity == nil {
+                // Legacy token-only connect: no device block, no challenge needed.
+                self.sendConnect(nonce: nil)
+            } else {
+                // Device auth signs the gateway's challenge nonce; wait for it.
+                self.armChallengeTimeout()
+            }
+        }
     }
 
     public func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask,
@@ -74,20 +90,38 @@ public final class GatewayClient: NSObject, URLSessionWebSocketDelegate {
         queue.async { self.handleDrop() }
     }
 
-    private func sendConnect() {
+    private func sendConnect(nonce: String?) {
+        // "ui" is the released-2026.6.1 mode for external operator clients
+        // ("operator" is rejected with INVALID_REQUEST; "backend" is reserved
+        // for OpenClaw-internal control-plane RPCs). Scopes only survive for
+        // paired devices, hence the signed device block below.
+        let clientId = "gateway-client", mode = "ui", role = "operator"
+        let scopes = ["operator.read"]
+        var params: [String: Any] = [
+            "minProtocol": 3, "maxProtocol": 4,
+            "client": ["id": clientId, "version": "1.0.0",
+                       "displayName": "Ziel van Sebastian",
+                       "platform": "macos", "mode": mode],
+            "role": role,
+            "scopes": scopes,
+            "auth": ["token": token],
+        ]
+        if let identity, let nonce {
+            let signedAtMs = Int64(Date().timeIntervalSince1970 * 1000)
+            let payload = DeviceIdentity.buildPayloadV3(
+                deviceId: identity.deviceId, clientId: clientId, clientMode: mode,
+                role: role, scopes: scopes, signedAtMs: signedAtMs,
+                token: token, nonce: nonce, platform: "macos", deviceFamily: nil)
+            params["device"] = [
+                "id": identity.deviceId,
+                "publicKey": identity.publicKeyRawBase64Url,
+                "signature": identity.sign(payload: payload),
+                "signedAt": signedAtMs,
+                "nonce": nonce,
+            ]
+        }
         let frame: [String: Any] = [
-            "type": "req", "id": Self.connectId, "method": "connect",
-            "params": [
-                "minProtocol": 3, "maxProtocol": 4,
-                "client": ["id": "gateway-client", "version": "1.0.0",
-                           // "ui" verified against OpenClaw 2026.6.1 — the
-                           // released mode enum differs from main-branch docs
-                           // ("operator" is rejected with INVALID_REQUEST).
-                           "platform": "macos", "mode": "ui"],
-                "role": "operator",
-                "scopes": ["operator.read"],
-                "auth": ["token": token],
-            ],
+            "type": "req", "id": Self.connectId, "method": "connect", "params": params,
         ]
         // Literal dictionary — serialisation cannot fail.
         let data = try! JSONSerialization.data(withJSONObject: frame)
@@ -97,6 +131,17 @@ public final class GatewayClient: NSObject, URLSessionWebSocketDelegate {
                 self?.queue.async { self?.handleDrop() }
             }
         }
+    }
+
+    private func armChallengeTimeout() {
+        challengeTimeout?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, !self.stopped, !self.handshakeComplete else { return }
+            self.log.error("gateway connect.challenge timeout")
+            self.handleDrop()
+        }
+        challengeTimeout = work
+        queue.asyncAfter(deadline: .now() + 3, execute: work)
     }
 
     private func receiveLoop(_ t: URLSessionWebSocketTask) {
@@ -134,16 +179,37 @@ public final class GatewayClient: NSObject, URLSessionWebSocketDelegate {
             guard let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
                 return   // pre-handshake garbage / frames we don't parse
             }
-            // Ignore connect.challenge and other events until our res arrives.
+            if identity != nil,
+               obj["type"] as? String == "event",
+               obj["event"] as? String == "connect.challenge" {
+                let payload = obj["payload"] as? [String: Any]
+                let nonce = (payload?["nonce"] as? String)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                guard !nonce.isEmpty else {
+                    log.error("gateway connect.challenge missing nonce")
+                    handleDrop()
+                    return
+                }
+                challengeTimeout?.cancel()
+                challengeTimeout = nil
+                sendConnect(nonce: nonce)
+                return
+            }
+            // Ignore other events until our res arrives.
             guard obj["type"] as? String == "res",
                   obj["id"] as? String == Self.connectId else { return }
             if obj["ok"] as? Bool == true {
                 handshakeComplete = true
                 attempts = 0
-                log.info("gateway handshake ok")
+                let payload = obj["payload"] as? [String: Any]
+                let auth = payload?["auth"] as? [String: Any]
+                let negotiatedScopes = (auth?["scopes"] as? [String]) ?? []
+                log.info("gateway handshake ok (role=\(auth?["role"] as? String ?? "?"), scopes=\(negotiatedScopes))")
                 onEvent(.connectionUp)
             } else {
-                log.error("gateway rejected connect (auth)")
+                let error = obj["error"] as? [String: Any]
+                let message = error?["message"] as? String ?? "no detail"
+                log.error("gateway rejected connect (\(error?["code"] as? String ?? "?"): \(message))")
                 authRejected = true
                 dropReported = true
                 onEvent(.connectionDown(auth: true))
@@ -165,6 +231,8 @@ public final class GatewayClient: NSObject, URLSessionWebSocketDelegate {
         // Drop already reported (idempotent guard).
         if dropReported { return }
         dropReported = true
+        challengeTimeout?.cancel()
+        challengeTimeout = nil
         task?.cancel(with: .normalClosure, reason: nil)
         task = nil
 

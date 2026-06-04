@@ -7,6 +7,7 @@ import Network
 public final class MockGatewayServer {
     private let listener: NWListener
     private let expectToken: String?
+    private let requireDeviceAuth: Bool
     private let steps: [MockStep]
     private let queue = DispatchQueue(label: "mock-gateway")
     private var connections: [NWConnection] = []
@@ -14,8 +15,10 @@ public final class MockGatewayServer {
     /// Port 0 → ephemeral; read `port` after start() returns.
     public private(set) var port: UInt16 = 0
 
-    public init(requestedPort: UInt16, expectToken: String? = nil, steps: [MockStep]) throws {
+    public init(requestedPort: UInt16, expectToken: String? = nil,
+                requireDeviceAuth: Bool = false, steps: [MockStep]) throws {
         self.expectToken = expectToken
+        self.requireDeviceAuth = requireDeviceAuth
         self.steps = steps
         let params = NWParameters.tcp
         let ws = NWProtocolWebSocket.Options()
@@ -68,7 +71,14 @@ public final class MockGatewayServer {
             if case .failed = state { self?.prune(conn) }
         }
         conn.start(queue: queue)
-        receiveHandshake(conn)
+        // Real gateway pushes a challenge at socket open; device-auth clients
+        // must echo its nonce inside the signed payload.
+        let nonce = UUID().uuidString
+        send(conn, obj: [
+            "type": "event", "event": "connect.challenge",
+            "payload": ["nonce": nonce, "ts": 0],
+        ])
+        receiveHandshake(conn, nonce: nonce)
     }
 
     private func prune(_ conn: NWConnection?) {
@@ -76,7 +86,7 @@ public final class MockGatewayServer {
         connections.removeAll { $0 === conn }
     }
 
-    private func receiveHandshake(_ conn: NWConnection) {
+    private func receiveHandshake(_ conn: NWConnection, nonce: String) {
         conn.receiveMessage { [weak self] data, _, _, error in
             guard let self, error == nil, let data else { return }
             guard
@@ -101,9 +111,22 @@ public final class MockGatewayServer {
                 ])
                 return
             }
+            if self.requireDeviceAuth,
+               let failure = DeviceAuthVerifier.verify(params: params ?? [:], expectedNonce: nonce) {
+                self.sendThenClose(conn, obj: [
+                    "type": "res", "id": id, "ok": false,
+                    "error": ["code": "DEVICE_AUTH_FAILED", "message": failure],
+                ])
+                return
+            }
+            // Mirror the real gateway: device-verified clients keep their requested
+            // scopes; device-less clients get scopes cleared.
+            let role = params?["role"] as? String ?? "operator"
+            let scopes = self.requireDeviceAuth ? (params?["scopes"] as? [String] ?? []) : []
             self.send(conn, obj: [
                 "type": "res", "id": id, "ok": true,
-                "payload": ["type": "hello-ok", "protocol": 4],
+                "payload": ["type": "hello-ok", "protocol": 4,
+                            "auth": ["role": role, "scopes": scopes]],
             ])
             self.play(self.steps, on: conn)
             self.drainRequests(conn)

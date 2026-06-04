@@ -12,22 +12,30 @@
 
 ---
 
-## Verified OpenClaw protocol facts (research 2026-06-04, openclaw/openclaw@main)
+## Verified OpenClaw protocol facts (research 2026-06-04, openclaw/openclaw@main; device-auth facts re-verified against released 2026.6.1 dist on vm-claw)
 
 Everything the GatewayClient and mock server implement, verified against source:
 
 - **Endpoint:** `ws://127.0.0.1:18789/` (default port 18789, path `/`). Text frames, JSON payloads. First client frame MUST be the connect request.
-- **Connect request** (minimal, token auth; device identity NOT required with a token):
+- **Connect request** (token auth + device identity):
   ```json
   {"type":"req","id":"connect-1","method":"connect","params":{
     "minProtocol":3,"maxProtocol":4,
-    "client":{"id":"gateway-client","version":"1.0.0","platform":"macos","mode":"operator"},
+    "client":{"id":"gateway-client","version":"1.0.0","platform":"macos","mode":"ui"},
     "role":"operator","scopes":["operator.read"],
-    "auth":{"token":"<token>"}}}
+    "auth":{"token":"<token>"},
+    "device":{"id":"<sha256-hex of raw pubkey>","publicKey":"<base64url raw 32B>",
+              "signature":"<base64url Ed25519 sig>","signedAt":<epoch-ms>,"nonce":"<challenge nonce>"}}}
   ```
   `client.id` is a **closed enum** — `"gateway-client"` is the canonical id for external clients (`packages/gateway-protocol/src/client-info.ts`).
-- **Success response:** `{"type":"res","id":"connect-1","ok":true,"payload":{"type":"hello-ok","protocol":4,...}}`. Failure: `ok:false` with `error`.
-- The gateway may push a `connect.challenge` event before/after our request — ignore it (only needed for device-identity auth).
+- **`client.mode` on released 2026.6.1:** `"ui"` is the correct mode for us. `"operator"` is rejected with INVALID_REQUEST. `"backend"` + `client.id:"gateway-client"` on loopback bypasses device pairing but is *reserved for OpenClaw-internal control-plane RPCs* — do not use it (it trips security review).
+- **Scopes are durable per paired device.** A token-auth WS connect *without* a `device` block authenticates but gets `scopes` cleared to `[]` and never enters the pairing queue. With a `device` block: first connect creates a pending pairing request (`openclaw devices approve` once, keyed to the public key), then every reconnect with the same keypair gets the approved scopes.
+- **Device auth signing (from `dist/device-identity-*.js`, 2026.6.1):**
+  - Keypair: Ed25519. `deviceId` = SHA-256 hex of the raw 32-byte public key. `publicKey` field = base64url (no padding) of the raw key. `signature` = base64url (no padding) of the Ed25519 signature over the UTF-8 payload.
+  - Payload (v3): `"v3|{deviceId}|{client.id}|{client.mode}|{role}|{scopes joined ','}|{signedAtMs}|{auth token}|{nonce}|{platform lowercased}|{deviceFamily lowercased or empty}"`.
+  - The `token` component is the shared gateway token (`signatureToken = authToken ?? authBootstrapToken` in `client-*.js selectConnectAuth`).
+  - OpenClaw stores identity at `~/.openclaw/identity/device.json` as `{version:1, deviceId, publicKeyPem, privateKeyPem, createdAtMs}`.
+- **Challenge-first flow:** the gateway pushes `{"type":"event","event":"connect.challenge","payload":{"nonce":"…","ts":…}}` at socket open. The official client *waits* for it and uses its nonce in the device payload (closing the socket on a challenge timeout). Send `connect` only after the challenge when using device identity.
 - **No subscription step:** with `operator.read`, `agent` and `chat` broadcast events arrive automatically after hello-ok.
 - **`agent` event envelope:** `{"type":"event","event":"agent","payload":{"runId","seq","stream","ts","sessionKey"?,"sessionId"?,"isHeartbeat"?,"data":{...}}}`
 - **Streams we consume** (others — `thinking`, `plan`, `item`, etc. — are ignored in v1):

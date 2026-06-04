@@ -18,12 +18,20 @@ final class GatewayIntegrationTests: XCTestCase {
     }
 
     private func makeClient(port: UInt16, token: String = "tok",
+                            identity: DeviceIdentity? = nil,
                             collector: Collector) -> GatewayClient {
         GatewayClient(
             url: URL(string: "ws://127.0.0.1:\(port)")!,
             token: token,
+            identity: identity,
             onEvent: { collector.add($0) }
         )
+    }
+
+    private func makeIdentity() throws -> DeviceIdentity {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ziel-gw-tests-\(UUID().uuidString)")
+        return try DeviceIdentity.loadOrCreate(at: dir.appendingPathComponent("device-identity.json"))
     }
 
     func testConnectHandshakeAndEventFlow() throws {
@@ -130,5 +138,48 @@ final class GatewayIntegrationTests: XCTestCase {
         // none may surface as events.
         RunLoop.current.run(until: Date().addingTimeInterval(0.7))
         XCTAssertEqual(collector.snapshot().count, countAfterStop)
+    }
+
+    // MARK: - Device identity handshake (OpenClaw 2026.6.1 pairing flow)
+
+    func testDeviceAuthHandshakeCompletesAgainstVerifyingServer() throws {
+        let server = try MockGatewayServer(
+            requestedPort: 0, expectToken: "tok", requireDeviceAuth: true,
+            steps: happyPathSteps())
+        try server.start()
+        defer { server.stop() }
+
+        let collector = Collector()
+        let client = makeClient(port: server.port, identity: try makeIdentity(),
+                                collector: collector)
+        client.start()
+        defer { client.stop() }
+
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline && collector.snapshot().count < 5 {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        let events = collector.snapshot()
+        XCTAssertEqual(events.first, .connectionUp,
+                       "client must wait for connect.challenge and send a verifiable device block")
+        XCTAssertTrue(events.contains(.runEnded(run: "r1", session: "main")))
+    }
+
+    func testMissingDeviceBlockIsRejectedByVerifyingServer() throws {
+        let server = try MockGatewayServer(
+            requestedPort: 0, expectToken: "tok", requireDeviceAuth: true, steps: [])
+        try server.start()
+        defer { server.stop() }
+
+        let collector = Collector()
+        let client = makeClient(port: server.port, identity: nil, collector: collector)
+        client.start()
+        defer { client.stop() }
+
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline && collector.snapshot().isEmpty {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        XCTAssertEqual(collector.snapshot().first, .connectionDown(auth: true))
     }
 }

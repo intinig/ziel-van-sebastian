@@ -1,13 +1,14 @@
 import Foundation
 
 func usage() -> Never {
-    print("usage: mock-gateway --scenario <path.json> [--port N] [--expect-token T]")
+    print("usage: mock-gateway --scenario <path.json> [--port N] [--expect-token T] [--require-device-auth]")
     exit(2)
 }
 
 var port: UInt16 = 18789
 var scenarioPath: String?
 var expectToken: String?
+var requireDeviceAuth = false
 var args = Array(CommandLine.arguments.dropFirst())
 while !args.isEmpty {
     let a = args.removeFirst()
@@ -21,6 +22,8 @@ while !args.isEmpty {
     case "--expect-token":
         guard !args.isEmpty else { usage() }
         expectToken = args.removeFirst()
+    case "--require-device-auth":
+        requireDeviceAuth = true
     default: usage()
     }
 }
@@ -28,7 +31,8 @@ guard let scenarioPath else { usage() }
 
 do {
     let steps = try ScenarioLoader.load(URL(fileURLWithPath: scenarioPath))
-    let server = try MockGatewayServer(requestedPort: port, expectToken: expectToken, steps: steps)
+    let server = try MockGatewayServer(requestedPort: port, expectToken: expectToken,
+                                       requireDeviceAuth: requireDeviceAuth, steps: steps)
     try server.start()
     print("mock-gateway listening on ws://127.0.0.1:\(server.port) — scenario: \(scenarioPath)")
     print("each new connection gets the handshake + scenario; Ctrl-C to stop")

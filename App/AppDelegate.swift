@@ -36,9 +36,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             let url = URL(string: config.gateway.url)
                 ?? URL(string: GatewayConfig().url)!
+            let identityURL = FileManager.default
+                .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("Ziel van Sebastian/device-identity.json")
+            let identity = try? DeviceIdentity.loadOrCreate(at: identityURL)
+            if identity == nil {
+                NSLog("device identity unavailable at %@ — connecting without device pairing (gateway will clear scopes)",
+                      identityURL.path)
+            }
             let gateway = GatewayClient(
                 url: url,
                 token: config.gateway.token,
+                identity: identity,
                 onEvent: { [weak director] event in
                     DispatchQueue.main.async {
                         director?.handle(event, now: clock())
