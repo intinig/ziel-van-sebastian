@@ -1,5 +1,3 @@
-import Foundation
-
 /// Hard offset drop shadow. Offsets are in face-grid pixels (the pixel-art
 /// unit, `FaceTransform.gridPixel`) so the shadow scales with the display.
 public struct ShadowSpec: Equatable {
