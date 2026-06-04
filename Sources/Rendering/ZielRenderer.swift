@@ -11,21 +11,23 @@ final class ZielRenderer: NSObject, MTKViewDelegate {
     let crt: CRTPipeline
     /// Monotonic app clock, shared with the Director's event timestamps.
     let clock: () -> TimeInterval
+    private let background: MTLClearColor
     /// Pulls the current scene; wired to Director.tick by the app.
     var sceneProvider: (TimeInterval) -> SceneState
 
     init(device: MTLDevice, pixelFormat: MTLPixelFormat,
-         fontName: String,
-         shaderConfig: ShaderConfig,
+         look: ResolvedLook,
          clock: @escaping () -> TimeInterval,
          sceneProvider: @escaping (TimeInterval) -> SceneState) throws {
         self.device = device
         self.queue = device.makeCommandQueue()!
         let library = try device.makeDefaultLibrary(bundle: .main)
         self.scenePass = try ScenePass(device: device, library: library, pixelFormat: pixelFormat)
-        self.glyphs = GlyphRasterizer(device: device, fontName: fontName)
+        self.glyphs = GlyphRasterizer(device: device, fontName: look.fontName)
         self.crt = try CRTPipeline(device: device, library: library,
-                                   drawableFormat: pixelFormat, shaderConfig: shaderConfig)
+                                   drawableFormat: pixelFormat, shaderConfig: look.shader)
+        let bg = ColorRGB(hex: look.background)
+        self.background = MTLClearColor(red: bg.r, green: bg.g, blue: bg.b, alpha: 1)
         self.clock = clock
         self.sceneProvider = sceneProvider
         super.init()
@@ -47,7 +49,7 @@ final class ZielRenderer: NSObject, MTKViewDelegate {
         sceneRPD.colorAttachments[0].texture = crt.sceneTex
         sceneRPD.colorAttachments[0].loadAction = .clear
         sceneRPD.colorAttachments[0].storeAction = .store
-        sceneRPD.colorAttachments[0].clearColor = MTLClearColor(red: 0.012, green: 0.012, blue: 0.012, alpha: 1)
+        sceneRPD.colorAttachments[0].clearColor = background
         if let enc = cmd.makeRenderCommandEncoder(descriptor: sceneRPD) {
             let w = Double(view.drawableSize.width)
             let h = Double(view.drawableSize.height)

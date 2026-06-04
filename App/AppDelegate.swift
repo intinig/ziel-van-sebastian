@@ -74,8 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let renderer = try! ZielRenderer(
             device: device,
             pixelFormat: mtkView.colorPixelFormat,
-            fontName: look.fontName,
-            shaderConfig: look.shader,
+            look: look,
             clock: clock,
             sceneProvider: { [weak director] now in
                 director?.tick(now: now)
