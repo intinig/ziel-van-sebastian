@@ -93,11 +93,12 @@ public final class MockGatewayServer {
             let token = auth?["token"] as? String
 
             if let expected = self.expectToken, token != expected {
-                self.send(conn, obj: [
+                // Send the rejection frame, then cancel only after the send completes
+                // so the client can observe the ok:false response before the close.
+                self.sendThenClose(conn, obj: [
                     "type": "res", "id": id, "ok": false,
                     "error": ["code": "UNAUTHORIZED", "message": "bad token"],
                 ])
-                conn.cancel()
                 return
             }
             self.send(conn, obj: [
@@ -146,6 +147,16 @@ public final class MockGatewayServer {
         let meta = NWProtocolWebSocket.Metadata(opcode: .text)
         let ctx = NWConnection.ContentContext(identifier: "frame", metadata: [meta])
         conn.send(content: data, contentContext: ctx, completion: .idempotent)
+    }
+
+    private func sendThenClose(_ conn: NWConnection, obj: [String: Any]) {
+        let data = try! JSONSerialization.data(withJSONObject: obj)
+        let meta = NWProtocolWebSocket.Metadata(opcode: .text)
+        let ctx = NWConnection.ContentContext(identifier: "frame", metadata: [meta])
+        conn.send(content: data, contentContext: ctx, isComplete: true,
+                  completion: .contentProcessed { [weak self] _ in
+            self?.queue.async { conn.cancel() }
+        })
     }
 }
 
