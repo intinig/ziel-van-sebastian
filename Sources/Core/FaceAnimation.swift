@@ -23,9 +23,18 @@ public enum FaceAnimation {
         1.0 + 0.02 * sin(t * 2 * .pi / 6.0)
     }
 
-    /// Scanline sweep position 0…1 (top→bottom), period 2.8s.
-    public static func sweepY(at t: TimeInterval, period: Double = 2.8) -> Double {
-        (t / period).truncatingRemainder(dividingBy: 1.0)
+
+    /// Thinking dots: how many of the three thought-bubble dots are visible.
+    /// Hard steps (no easing) over a 2s cycle: blank, 1, 2, 3, blank.
+    public static func thinkingDotsVisible(at t: TimeInterval, period: Double = 2.0) -> Int {
+        let p = t.truncatingRemainder(dividingBy: period) / period
+        switch p {
+        case ..<0.15: return 0
+        case ..<0.40: return 1
+        case ..<0.65: return 2
+        case ..<0.85: return 3
+        default: return 0
+        }
     }
 
     /// Thinking: eyes drift up-left and back, 5s cycle. Grid units

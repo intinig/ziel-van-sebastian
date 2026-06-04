@@ -28,12 +28,12 @@ public final class Director {
     private let thinkingTint: ColorRGB
     private let speakingTint: ColorRGB
 
-    public init(config: ZielConfig) {
+    public init(config: ZielConfig, look: ResolvedLook) {
         self.pacer = WordPacer(config: config.pacing)
         self.behavior = config.behavior
-        self.idleTint = ColorRGB(hex: config.look.idleTint)
-        self.thinkingTint = ColorRGB(hex: config.look.thinkingTint)
-        self.speakingTint = ColorRGB(hex: config.look.speakingTint)
+        self.idleTint = ColorRGB(hex: look.idleTint)
+        self.thinkingTint = ColorRGB(hex: look.thinkingTint)
+        self.speakingTint = ColorRGB(hex: look.speakingTint)
     }
 
     /// Live config reload (pacing only; tints/timings need restart in v1).

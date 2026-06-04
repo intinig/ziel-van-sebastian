@@ -7,6 +7,7 @@ struct RunOptions {
     var configPath: String?
     var installLoginItem = false
     var debugState: String?
+    var theme: String?
 
     static func parse(_ args: [String]) -> RunOptions {
         var o = RunOptions()
@@ -22,6 +23,14 @@ struct RunOptions {
                     o.configPath = args[i]
                 } else {
                     fputs("error: --config requires a path argument\n", stderr)
+                    exit(1)
+                }
+            case "--theme":
+                i += 1
+                if i < args.count {
+                    o.theme = args[i]
+                } else {
+                    fputs("error: --theme requires a theme name argument\n", stderr)
                     exit(1)
                 }
             case "--state":

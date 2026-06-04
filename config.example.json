@@ -14,21 +14,7 @@
     "minFactor": 0.45
   },
   "look": {
-    "idleTint": "#41ff6a",
-    "thinkingTint": "#ffb000",
-    "speakingTint": "#e6edf5",
-    "fontName": "Menlo-Bold",
-    "shader": {
-      "scanlineIntensity": 0.35,
-      "scanlinePitch": 3,
-      "maskIntensity": 0.25,
-      "bloomStrength": 0.55,
-      "curvature": 0.12,
-      "vignette": 0.35,
-      "flicker": 0.03,
-      "noise": 0.04,
-      "persistence": 0.82
-    }
+    "theme": "hello"
   },
   "behavior": {
     "wakingSeconds": 0.8,

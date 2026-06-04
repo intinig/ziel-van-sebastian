@@ -21,7 +21,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let configURL = options.configPath.map { URL(fileURLWithPath: $0) } ?? ZielConfig.defaultURL
         config = ZielConfig.load(from: configURL)
 
-        let director = Director(config: config)
+        let look: ResolvedLook
+        do {
+            look = try ResolvedLook.resolve(config.look, themeOverride: options.theme)
+        } catch {
+            fputs("error: \(error)\n", stderr)
+            exit(1)
+        }
+
+        let director = Director(config: config, look: look)
         self.director = director
 
         let epoch = CACurrentMediaTime()
@@ -66,8 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let renderer = try! ZielRenderer(
             device: device,
             pixelFormat: mtkView.colorPixelFormat,
-            fontName: config.look.fontName,
-            shaderConfig: config.look.shader,
+            look: look,
             clock: clock,
             sceneProvider: { [weak director] now in
                 director?.tick(now: now)
@@ -123,6 +130,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             director.handle(.runStarted(run: "dbg", session: "dbg"), now: clock())
             director.handle(.textDelta(run: "dbg", session: "dbg",
                 text: "The build finished. All 142 tests pass. Deploy went clean. Want me to tag the release? "), now: clock())
+        case "idle":
+            break  // connectionUp (sent by the caller) already lands on idle
         default:
             if let s = options.debugState { fputs("warning: unknown --state '\(s)'\n", stderr) }
         }
@@ -159,9 +168,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         source.setEventHandler { [weak self] in
             // Keep last-good config when the file is mid-edit or invalid.
             if let data = try? Data(contentsOf: url),
-               let fresh = try? ZielConfig.decode(data) {
+               let fresh = try? ZielConfig.decode(data),
+               let freshLook = try? ResolvedLook.resolve(fresh.look, themeOverride: self?.options.theme) {
                 self?.config = fresh
-                renderer.crt.shaderConfig = fresh.look.shader
+                renderer.crt.shaderConfig = freshLook.shader
                 director.updatePacing(fresh.pacing)
             }
             // Editors often replace the file: re-arm the watcher.

@@ -62,22 +62,52 @@ public struct ShaderConfig: Codable, Equatable {
     }
 }
 
-public struct LookConfig: Codable, Equatable {
-    public var idleTint: String = "#41ff6a"
-    public var thinkingTint: String = "#ffb000"
-    public var speakingTint: String = "#e6edf5"
-    public var fontName: String = "Menlo-Bold"
-    public var shader: ShaderConfig = ShaderConfig()
+/// Partial shader override from config — only keys present in JSON are set.
+/// Applied on top of the active theme's ShaderConfig.
+public struct ShaderOverlay: Codable, Equatable {
+    public var scanlineIntensity: Double?
+    public var scanlinePitch: Double?
+    public var maskIntensity: Double?
+    public var bloomStrength: Double?
+    public var curvature: Double?
+    public var vignette: Double?
+    public var flicker: Double?
+    public var noise: Double?
+    public var persistence: Double?
 
     public init() {}
-    public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        idleTint = try c.decodeIfPresent(String.self, forKey: .idleTint) ?? idleTint
-        thinkingTint = try c.decodeIfPresent(String.self, forKey: .thinkingTint) ?? thinkingTint
-        speakingTint = try c.decodeIfPresent(String.self, forKey: .speakingTint) ?? speakingTint
-        fontName = try c.decodeIfPresent(String.self, forKey: .fontName) ?? fontName
-        shader = try c.decodeIfPresent(ShaderConfig.self, forKey: .shader) ?? shader
+
+    public func applied(to base: ShaderConfig) -> ShaderConfig {
+        var s = base
+        if let v = scanlineIntensity { s.scanlineIntensity = v }
+        if let v = scanlinePitch { s.scanlinePitch = v }
+        if let v = maskIntensity { s.maskIntensity = v }
+        if let v = bloomStrength { s.bloomStrength = v }
+        if let v = curvature { s.curvature = v }
+        if let v = vignette { s.vignette = v }
+        if let v = flicker { s.flicker = v }
+        if let v = noise { s.noise = v }
+        if let v = persistence { s.persistence = v }
+        return s
     }
+}
+
+/// Partial look override from config. Values come from the theme named by
+/// `theme` (default: Theme.defaultName); any key set here wins over the theme.
+/// Synthesized Codable uses decodeIfPresent for optionals — absent keys stay nil.
+public struct LookConfig: Codable, Equatable {
+    public var theme: String?
+    public var idleTint: String?
+    public var thinkingTint: String?
+    public var speakingTint: String?
+    public var fontName: String?
+    public var background: String?
+    public var shadowColor: String?
+    public var shadowOffsetX: Double?
+    public var shadowOffsetY: Double?
+    public var shader: ShaderOverlay?
+
+    public init() {}
 }
 
 public struct BehaviorConfig: Codable, Equatable {
