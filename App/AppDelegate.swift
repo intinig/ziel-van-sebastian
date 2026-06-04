@@ -23,7 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let look: ResolvedLook
         do {
-            look = try ResolvedLook.resolve(config.look)
+            look = try ResolvedLook.resolve(config.look, themeOverride: options.theme)
         } catch {
             fputs("error: \(error)\n", stderr)
             exit(1)
@@ -168,7 +168,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Keep last-good config when the file is mid-edit or invalid.
             if let data = try? Data(contentsOf: url),
                let fresh = try? ZielConfig.decode(data),
-               let freshLook = try? ResolvedLook.resolve(fresh.look) {
+               let freshLook = try? ResolvedLook.resolve(fresh.look, themeOverride: self?.options.theme) {
                 self?.config = fresh
                 renderer.crt.shaderConfig = freshLook.shader
                 director.updatePacing(fresh.pacing)
