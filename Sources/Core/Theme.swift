@@ -52,3 +52,52 @@ public struct Theme: Equatable {
         )
     }()
 }
+
+public enum ThemeError: Error, Equatable, CustomStringConvertible {
+    case unknownTheme(name: String, valid: [String])
+
+    public var description: String {
+        switch self {
+        case let .unknownTheme(name, valid):
+            return "unknown theme '\(name)' — valid themes: \(valid.joined(separator: ", "))"
+        }
+    }
+}
+
+/// The look the app actually runs with: active theme + config overrides,
+/// computed once at startup.
+public struct ResolvedLook: Equatable {
+    public var idleTint: String
+    public var thinkingTint: String
+    public var speakingTint: String
+    public var fontName: String
+    public var background: String
+    public var shadowColor: String?
+    public var shadowOffsetX: Double
+    public var shadowOffsetY: Double
+    public var shader: ShaderConfig
+
+    /// nil when no shadow color, or when both offsets are zero.
+    public var shadow: ShadowSpec? {
+        guard let hex = shadowColor, shadowOffsetX != 0 || shadowOffsetY != 0 else { return nil }
+        return ShadowSpec(color: ColorRGB(hex: hex), offsetX: shadowOffsetX, offsetY: shadowOffsetY)
+    }
+
+    public static func resolve(_ look: LookConfig, themeOverride: String? = nil) throws -> ResolvedLook {
+        let name = themeOverride ?? look.theme ?? Theme.defaultName
+        guard let theme = Theme.builtIns[name] else {
+            throw ThemeError.unknownTheme(name: name, valid: Theme.builtIns.keys.sorted())
+        }
+        return ResolvedLook(
+            idleTint: look.idleTint ?? theme.idleTint,
+            thinkingTint: look.thinkingTint ?? theme.thinkingTint,
+            speakingTint: look.speakingTint ?? theme.speakingTint,
+            fontName: look.fontName ?? theme.fontName,
+            background: look.background ?? theme.background,
+            shadowColor: look.shadowColor ?? theme.shadowColor,
+            shadowOffsetX: look.shadowOffsetX ?? theme.shadowOffsetX,
+            shadowOffsetY: look.shadowOffsetY ?? theme.shadowOffsetY,
+            shader: (look.shader ?? ShaderOverlay()).applied(to: theme.shader)
+        )
+    }
+}

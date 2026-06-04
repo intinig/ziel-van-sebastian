@@ -2,7 +2,10 @@ import XCTest
 
 final class DirectorTests: XCTestCase {
     private func makeDirector() -> Director {
-        Director(config: ZielConfig())
+        // classic keeps the green/amber tint assertions below meaningful.
+        var look = LookConfig()
+        look.theme = "classic"
+        return Director(config: ZielConfig(), look: try! ResolvedLook.resolve(look))
     }
 
     func testStartsOffline() {
