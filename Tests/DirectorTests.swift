@@ -120,4 +120,41 @@ final class DirectorTests: XCTestCase {
         XCTAssertEqual(mid.r, expected.r, accuracy: 0.01)
         XCTAssertEqual(mid.g, expected.g, accuracy: 0.01)
     }
+
+    func testThinkingRunEndsWithoutTextSettles() {
+        let d = makeDirector()
+        d.handle(.connectionUp, now: 0)
+        d.handle(.runStarted(run: "r1", session: "main"), now: 10)
+        XCTAssertEqual(d.tick(now: 11).phase, .thinking)
+        d.handle(.runEnded(run: "r1", session: "main"), now: 11.5)   // no text ever
+        XCTAssertEqual(d.tick(now: 12).phase, .settling)
+        XCTAssertEqual(d.tick(now: 13.3).phase, .idle)
+    }
+
+    func testPendingRunAdoptedAfterFocusedRunDiesInThinking() {
+        let d = makeDirector()
+        d.handle(.connectionUp, now: 0)
+        d.handle(.runStarted(run: "a", session: "s1"), now: 10)
+        d.handle(.runStarted(run: "b", session: "s2"), now: 10)
+        d.handle(.textDelta(run: "a", session: "s1", text: "hi "), now: 10.05)
+        d.handle(.textDelta(run: "b", session: "s2", text: "yo "), now: 10.1)
+        XCTAssertEqual(d.tick(now: 11).word, "hi")                    // a focused
+        XCTAssertEqual(d.tick(now: 11.3).phase, .thinking)            // a drained, still active
+        d.handle(.runEnded(run: "b", session: "s2"), now: 11.35)      // b ends, pending kept
+        d.handle(.runEnded(run: "a", session: "s1"), now: 11.4)       // focused a dies in thinking
+        XCTAssertEqual(d.tick(now: 11.5).word, "yo")                  // b adopted from thinking
+        XCTAssertEqual(d.tick(now: 11.85).phase, .settling)
+    }
+
+    func testToolOnlyRunsDoNotAccumulate() {
+        let d = makeDirector()
+        d.handle(.connectionUp, now: 0)
+        for i in 0..<50 {
+            let t = Double(i)
+            d.handle(.runStarted(run: "r\(i)", session: "s"), now: 100 + t)
+            d.handle(.toolStarted(run: "r\(i)", session: "s", tool: "exec"), now: 100.1 + t)
+            d.handle(.runEnded(run: "r\(i)", session: "s"), now: 100.2 + t)
+        }
+        XCTAssertEqual(d.runCount, 0)
+    }
 }

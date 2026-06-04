@@ -41,6 +41,9 @@ public final class Director {
         pacer.config = p
     }
 
+    /// Number of tracked runs — for tests and diagnostics only.
+    public var runCount: Int { runs.count }
+
     // MARK: - Events
 
     public func handle(_ event: AgentEvent, now: TimeInterval) {
@@ -79,7 +82,13 @@ public final class Director {
             let tail = runs[run]!.stripper.flush()
             route(tail, from: run)
             runs[run]!.ended = true
-            if focusedRun == run { pacer.endOfText() }
+            if focusedRun == run {
+                pacer.endOfText()
+            } else if runs[run]!.pending.isEmpty {
+                // Tool-only or empty-text run: nothing left to say — evict now
+                // so days of background runs can't grow `runs` unboundedly.
+                runs.removeValue(forKey: run)
+            }
         }
     }
 
@@ -143,6 +152,7 @@ public final class Director {
         }
         if focusedRun == run {
             pacer.feed(stripped)
+            // Late delta after runEnded (out-of-order frames): re-seal the queue.
             if runs[run]?.ended == true { pacer.endOfText() }
         } else {
             runs[run]!.pending += stripped
@@ -159,6 +169,20 @@ public final class Director {
         case .thinking:
             if startNextWord(now: now) {
                 go(.speaking, now: now)
+                return
+            }
+            // The focused run may have died with nothing queued — release it so
+            // pending runs can be adopted and the machine can wind down.
+            if let focused = focusedRun, runs[focused]?.ended ?? true, pacer.isEmpty {
+                runs.removeValue(forKey: focused)
+                focusedRun = nil
+                if adoptPendingRun(now: now), startNextWord(now: now) {
+                    go(.speaking, now: now)
+                    return
+                }
+            }
+            if !anyActiveRuns {
+                go(.settling, now: now)
             }
         case .speaking:
             guard let word = currentWord else {
