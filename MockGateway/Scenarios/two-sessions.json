@@ -1,0 +1,10 @@
+{
+  "steps": [
+    {"delayMs": 300, "send": {"type":"event","event":"agent","payload":{"runId":"a","seq":0,"stream":"lifecycle","ts":0,"sessionKey":"discord","data":{"phase":"start"}}}},
+    {"delayMs": 100, "send": {"type":"event","event":"agent","payload":{"runId":"b","seq":0,"stream":"lifecycle","ts":0,"sessionKey":"telegram","data":{"phase":"start"}}}},
+    {"delayMs": 300, "send": {"type":"event","event":"agent","payload":{"runId":"a","seq":1,"stream":"assistant","ts":0,"sessionKey":"discord","data":{"delta":"Alpha reply, first conversation. "}}}},
+    {"delayMs": 100, "send": {"type":"event","event":"agent","payload":{"runId":"b","seq":1,"stream":"assistant","ts":0,"sessionKey":"telegram","data":{"delta":"Beta reply, second conversation. "}}}},
+    {"delayMs": 200, "send": {"type":"event","event":"agent","payload":{"runId":"a","seq":2,"stream":"lifecycle","ts":0,"sessionKey":"discord","data":{"phase":"end"}}}},
+    {"delayMs": 100, "send": {"type":"event","event":"agent","payload":{"runId":"b","seq":2,"stream":"lifecycle","ts":0,"sessionKey":"telegram","data":{"phase":"end"}}}}
+  ]
+}

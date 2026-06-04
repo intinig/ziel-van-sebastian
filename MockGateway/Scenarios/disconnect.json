@@ -1,0 +1,7 @@
+{
+  "steps": [
+    {"delayMs": 300, "send": {"type":"event","event":"agent","payload":{"runId":"r1","seq":0,"stream":"lifecycle","ts":0,"sessionKey":"main","data":{"phase":"start"}}}},
+    {"delayMs": 600, "send": {"type":"event","event":"agent","payload":{"runId":"r1","seq":1,"stream":"assistant","ts":0,"sessionKey":"main","data":{"delta":"This sentence will be cut "}}}},
+    {"delayMs": 400, "close": true}
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "steps": [
+    {"delayMs": 300, "send": {"type":"event","event":"agent","payload":{"runId":"r1","seq":0,"stream":"lifecycle","ts":0,"sessionKey":"main","data":{"phase":"start"}}}},
+    {"delayMs": 200, "sendRaw": "this is not json {{{"},
+    {"delayMs": 200, "sendRaw": "{\"type\":\"event\",\"event\":\"agent\",\"payload\":{\"truncated\":"},
+    {"delayMs": 200, "send": {"type":"event","event":"agent","payload":{"runId":"r1","seq":1,"stream":"assistant","ts":0,"sessionKey":"main","data":{"delta":"Still alive after garbage."}}}},
+    {"delayMs": 300, "send": {"type":"event","event":"agent","payload":{"runId":"r1","seq":2,"stream":"lifecycle","ts":0,"sessionKey":"main","data":{"phase":"end"}}}}
+  ]
+}

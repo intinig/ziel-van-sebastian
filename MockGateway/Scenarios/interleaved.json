@@ -1,0 +1,9 @@
+{
+  "steps": [
+    {"delayMs": 300, "send": {"type":"event","event":"agent","payload":{"runId":"r1","seq":0,"stream":"lifecycle","ts":0,"sessionKey":"main","data":{"phase":"start"}}}},
+    {"delayMs": 600, "send": {"type":"event","event":"agent","payload":{"runId":"r1","seq":1,"stream":"assistant","ts":0,"sessionKey":"main","data":{"delta":"Checking the logs now. "}}}},
+    {"delayMs": 1200, "send": {"type":"event","event":"agent","payload":{"runId":"r1","seq":2,"stream":"tool","ts":0,"sessionKey":"main","data":{"phase":"start","name":"exec","toolCallId":"t1","args":{}}}}},
+    {"delayMs": 2500, "send": {"type":"event","event":"agent","payload":{"runId":"r1","seq":3,"stream":"assistant","ts":0,"sessionKey":"main","data":{"delta":"Found it: one flaky test, rerun passed."}}}},
+    {"delayMs": 400, "send": {"type":"event","event":"agent","payload":{"runId":"r1","seq":4,"stream":"lifecycle","ts":0,"sessionKey":"main","data":{"phase":"end"}}}}
+  ]
+}

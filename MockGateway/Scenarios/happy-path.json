@@ -1,0 +1,12 @@
+{
+  "steps": [
+    {"delayMs": 300, "send": {"type":"event","event":"agent","payload":{"runId":"r1","seq":0,"stream":"lifecycle","ts":0,"sessionKey":"main","data":{"phase":"start"}}}},
+    {"delayMs": 800, "send": {"type":"event","event":"agent","payload":{"runId":"r1","seq":1,"stream":"tool","ts":0,"sessionKey":"main","data":{"phase":"start","name":"read","toolCallId":"t1","args":{}}}}},
+    {"delayMs": 1500, "send": {"type":"event","event":"agent","payload":{"runId":"r1","seq":2,"stream":"tool","ts":0,"sessionKey":"main","data":{"phase":"start","name":"web_search","toolCallId":"t2","args":{}}}}},
+    {"delayMs": 1500, "send": {"type":"event","event":"agent","payload":{"runId":"r1","seq":3,"stream":"assistant","ts":0,"sessionKey":"main","data":{"delta":"The build finished. "}}}},
+    {"delayMs": 150, "send": {"type":"event","event":"agent","payload":{"runId":"r1","seq":4,"stream":"assistant","ts":0,"sessionKey":"main","data":{"delta":"All 142 tests pass. "}}}},
+    {"delayMs": 150, "send": {"type":"event","event":"agent","payload":{"runId":"r1","seq":5,"stream":"assistant","ts":0,"sessionKey":"main","data":{"delta":"Deploy to staging went clean. "}}}},
+    {"delayMs": 150, "send": {"type":"event","event":"agent","payload":{"runId":"r1","seq":6,"stream":"assistant","ts":0,"sessionKey":"main","data":{"delta":"Want me to tag the release?"}}}},
+    {"delayMs": 500, "send": {"type":"event","event":"agent","payload":{"runId":"r1","seq":7,"stream":"lifecycle","ts":0,"sessionKey":"main","data":{"phase":"end"}}}}
+  ]
+}
