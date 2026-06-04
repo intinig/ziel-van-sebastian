@@ -7,6 +7,8 @@ glowing word at a time.
 
 ![Demo — full lifecycle under the CRT pipeline](docs/screenshots/demo.gif)
 
+*Media above uses a heavier-than-default shader config so the CRT effects survive image scaling — defaults in [config.example.json](config.example.json) are subtler. Every knob is live-tunable.*
+
 ## What it looks like
 
 | Idle | Thinking |
