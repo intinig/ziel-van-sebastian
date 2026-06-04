@@ -108,4 +108,27 @@ final class GatewayIntegrationTests: XCTestCase {
         }
         XCTAssertTrue(collector.snapshot().contains(.textDelta(run: "r1", session: "main", text: "survived")))
     }
+
+    func testNoEventsAfterStop() throws {
+        let server = try MockGatewayServer(requestedPort: 0, expectToken: "tok", steps: happyPathSteps())
+        try server.start()
+        defer { server.stop() }
+
+        let collector = Collector()
+        let client = makeClient(port: server.port, collector: collector)
+        client.start()
+
+        // Wait for the connection to come up, then stop immediately.
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline && collector.snapshot().isEmpty {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        client.stop()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+        let countAfterStop = collector.snapshot().count
+        // Remaining scenario frames keep arriving at the socket for ~200ms;
+        // none may surface as events.
+        RunLoop.current.run(until: Date().addingTimeInterval(0.7))
+        XCTAssertEqual(collector.snapshot().count, countAfterStop)
+    }
 }

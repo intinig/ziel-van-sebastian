@@ -4,6 +4,7 @@ import os
 /// Connects to the OpenClaw gateway, performs the connect handshake,
 /// translates frames, reconnects with backoff. Emits AgentEvents on an
 /// internal serial queue — the caller hops to its own queue if needed.
+/// One-shot: after stop() the client cannot be restarted — create a new instance.
 public final class GatewayClient: NSObject, URLSessionWebSocketDelegate {
     private let url: URL
     private let token: String
@@ -44,6 +45,8 @@ public final class GatewayClient: NSObject, URLSessionWebSocketDelegate {
             self.stopped = true
             self.task?.cancel(with: .normalClosure, reason: nil)
             self.task = nil
+            // Break the URLSession→delegate retain cycle so the client deallocates.
+            self.session.invalidateAndCancel()
         }
     }
 
@@ -123,6 +126,7 @@ public final class GatewayClient: NSObject, URLSessionWebSocketDelegate {
     }
 
     private func handleFrame(_ data: Data) {
+        guard !stopped else { return }
         if !handshakeComplete {
             guard let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
                 return   // pre-handshake garbage / frames we don't parse
@@ -185,7 +189,8 @@ public final class GatewayClient: NSObject, URLSessionWebSocketDelegate {
             delay = 60   // a bad token won't fix itself quickly
         } else {
             attempts += 1
-            delay = min(60, pow(2, Double(min(attempts, 6)))) + Double.random(in: 0...1)
+            // First retry = 2^0 = 1s, then 2,4,8...60 (attempts incremented above).
+            delay = min(60, pow(2, Double(min(attempts, 6)) - 1)) + Double.random(in: 0...1)
         }
         log.info("reconnecting in \(delay, format: .fixed(precision: 1))s")
         queue.asyncAfter(deadline: .now() + delay) { [weak self] in
