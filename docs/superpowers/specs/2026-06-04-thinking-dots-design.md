@@ -21,24 +21,31 @@ Delete, with no config knob or fallback:
 
 ## Dots — geometry
 
-Three square pixel-art quads drawn with the flat pipeline (like the face), anchored
-in the same box the dozing "z z Z" uses — NDC center **(0.55, 0.6)**, box
-**0.18 × viewW** wide, **0.1 × viewH** tall (identical to the dozing `drawText`
-parameters).
+**The dots are rendered through the exact same path as the dozing "z z Z":** the
+renderer's `drawText` with the identical parameters — center NDC **(0.55, 0.6)**,
+`maxWFrac` **0.18**, `maxHFrac` **0.1**, phase tint, alpha 1.0. No custom quad
+geometry, no hand-tuned offsets: whatever box, baseline, and scale the zzz gets,
+the dots get.
 
-With B = box height (0.1 × viewH), per the approved mockup:
+The text for N visible dots is a five-cell monospace string (Menlo-Bold is
+monospaced, and `". . ."` is five cells exactly like `"z z Z"`):
 
-| | side | horizontal gap before | bottom lift vs dot 1 |
-|---|---|---|---|
-| dot 1 | 0.40 B | — | 0 |
-| dot 2 | 0.60 B | 0.55 B | 0.125 B |
-| dot 3 | 0.85 B | 0.55 B | 0.375 B |
+| visible | string |
+|---|---|
+| 1 | `".    "` (dot + 4 spaces) |
+| 2 | `". .  "` (dot, space, dot, 2 spaces) |
+| 3 | `". . ."` |
 
-Near-horizontal with a gentle rise to the right, sizes growing rightward (echoing
-"z z Z"'s final capital). The 3-dot group's bounding box is centered on the anchor.
-Dots use the phase tint (`scene.tint`) at alpha 1.0. In `hello` they cast the
-theme's hard shadow exactly like the face and glyphs (`ScenePass` shadow path);
-in `classic` there is no shadow, as everywhere else.
+All three strings have identical typographic width (monospace) and identical
+texture height (the rasterizer always uses full line height), so the fitted quad
+is the same for every count — dots appear in place, left to right, without the
+group shifting or rescaling. Dots sit on the same baseline as the zzz glyphs —
+flat, not diagonal — and inherit the theme shadow through the existing glyph
+shadow path (`hello`: hard shadow; `classic`: none).
+
+Caveat: a non-monospaced `fontName` override in config would make the padded
+strings drift slightly; the dozing zzz spacing makes the same assumption, so this
+is accepted.
 
 ## Animation — pure function of time
 
@@ -60,12 +67,11 @@ the thinking phase are unchanged. The dozing "z z Z" itself is unchanged.
 
 ## Rendering
 
-New `ScenePass` method (e.g. `drawThinkingDots(encoder:viewW:viewH:visible:tint:)`)
-that computes the dot quads in NDC from the box constants above, draws the shadow
-pass first when the theme has a shadow (reusing `shadowDeltaNDC`), then the
-foreground — the same double-draw pattern as `drawFace`. `ZielRenderer.drawScene`'s
-`.thinking` case calls it with `FaceAnimation.thinkingDotsVisible(at: now)` in
-place of the removed sweep call.
+No new ScenePass method. `ZielRenderer.drawScene`'s `.thinking` case replaces the
+removed sweep call with a `drawText` call (the zzz parameters above), selecting
+the string by `FaceAnimation.thinkingDotsVisible(at: now)` and skipping the call
+when the count is 0. Glyph textures are cached per string by `GlyphRasterizer`
+(3 cache entries).
 
 ## Testing
 
