@@ -1,0 +1,51 @@
+name: ZielVanSebastian
+options:
+  bundleIdPrefix: com.gintini
+  deploymentTarget:
+    macOS: "15.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGNING_REQUIRED: "NO"
+targets:
+  ZielVanSebastian:
+    type: application
+    platform: macOS
+    sources:
+      - App
+      - Sources
+    settings:
+      base:
+        PRODUCT_NAME: Ziel van Sebastian
+        PRODUCT_BUNDLE_IDENTIFIER: com.gintini.ZielVanSebastian
+        INFOPLIST_FILE: App/Info.plist
+  MockGateway:
+    type: tool
+    platform: macOS
+    sources:
+      - MockGateway
+      - Sources/MockGatewayKit
+    settings:
+      base:
+        PRODUCT_NAME: mock-gateway
+  CoreTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests
+      - Sources/Core
+      - Sources/Gateway
+      - Sources/MockGatewayKit
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  ZielVanSebastian:
+    build:
+      targets:
+        ZielVanSebastian: all
+        MockGateway: all
+    test:
+      targets:
+        - CoreTests
