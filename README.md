@@ -3,7 +3,9 @@
 A CRT soul for a Mac mini appliance. The Wokyis M5 dock looks like a 1984
 Macintosh; this app completes it: the happy-Mac face idles on a simulated
 phosphor tube, wakes amber when OpenClaw thinks, and speaks replies one big
-glowing word at a time.
+glowing word at a time. It mirrors every conversation OpenClaw has — direct
+chats stream live, and channel sessions (WhatsApp, iMessage) speak each reply
+as it lands.
 
 ![Demo — full lifecycle under the CRT pipeline](docs/screenshots/demo.gif)
 
@@ -34,6 +36,27 @@ glowing word at a time.
 
 Config is watched: shader knobs and pacing reload live while the app runs
 (edit the file in place; delete+recreate is not detected until restart).
+
+### Device pairing (one-time)
+
+The app authenticates with a token **plus** an Ed25519 device identity
+(generated on first run, stored next to the config). The first connect lands
+in the gateway's pairing queue with empty scopes; approve it once on the
+gateway host:
+
+    openclaw devices list       # find the pending request
+    openclaw devices approve <request-id>
+
+The approval is durable for the device key — reconnects and reinstalls that
+keep the identity file need no re-approval.
+
+### Troubleshooting the gateway
+
+    ./scripts/probe-gateway.sh           # handshake + pairing/scope verdict
+    ./scripts/probe-gateway.sh ui 60     # …then listen 60s and dump live frames
+
+The probe uses the same identity and auth path as the app; if it reports
+`SCOPES GRANTED`, the app will work.
 
 ## Run against a mock gateway
 
