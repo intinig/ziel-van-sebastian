@@ -36,18 +36,18 @@ public enum Phase: Equatable {
 
 /// Immutable per-frame snapshot the renderer consumes. Pure data.
 public struct SceneState: Equatable {
-    public var phase: Phase
+    public let phase: Phase
     /// 0…1 within timed transitions (waking/settling); 1 elsewhere.
-    public var phaseProgress: Double
-    public var timeInPhase: TimeInterval
+    public let phaseProgress: Double
+    public let timeInPhase: TimeInterval
     /// Current RSVP word (speaking) — nil otherwise.
-    public var word: String?
+    public let word: String?
     /// Seconds the current word has been on screen (drives the pop-in).
-    public var wordAge: TimeInterval
+    public let wordAge: TimeInterval
     /// Activity hint ("READING…") — populated only in waking/thinking.
-    public var hint: String?
-    public var dozing: Bool
-    public var tint: ColorRGB
+    public let hint: String?
+    public let dozing: Bool
+    public let tint: ColorRGB
 
     public init(phase: Phase, phaseProgress: Double, timeInPhase: TimeInterval,
                 word: String?, wordAge: TimeInterval, hint: String?,

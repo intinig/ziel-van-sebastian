@@ -17,6 +17,7 @@ final class FaceGeometryTests: XCTestCase {
         XCTAssertEqual(FaceGeometry.noseBar, FaceGeometry.PixelRect(x: 9, y: 0, w: 2, h: 11))
         XCTAssertEqual(FaceGeometry.noseFoot, FaceGeometry.PixelRect(x: 6, y: 9, w: 3, h: 2))   // hooks LEFT
         XCTAssertEqual(FaceGeometry.smileBottom, FaceGeometry.PixelRect(x: 4, y: 14, w: 11, h: 2))
+        XCTAssertEqual(FaceGeometry.eyes, [FaceGeometry.leftEye, FaceGeometry.rightEye])
     }
 
     func testColorHexParsing() {
@@ -26,5 +27,14 @@ final class FaceGeometryTests: XCTestCase {
         XCTAssertEqual(c.b, 0x6a / 255.0, accuracy: 0.001)
         let mid = ColorRGB.lerp(ColorRGB(r: 0, g: 0, b: 0), ColorRGB(r: 1, g: 1, b: 1), 0.5)
         XCTAssertEqual(mid.r, 0.5, accuracy: 0.001)
+        // Invalid input → white (documented fallback, relied on by config tints).
+        let bad = ColorRGB(hex: "zzz")
+        XCTAssertEqual(bad.r, 1.0, accuracy: 0.001)
+        XCTAssertEqual(bad, ColorRGB(hex: ""))
+        // lerp clamps t outside 0…1.
+        let clamped = ColorRGB.lerp(ColorRGB(r: 0, g: 0, b: 0), ColorRGB(r: 1, g: 1, b: 1), 1.5)
+        XCTAssertEqual(clamped.r, 1.0, accuracy: 0.001)
+        // scaled() intentionally does NOT clamp (the shader clips, not this type).
+        XCTAssertEqual(ColorRGB(r: 0.5, g: 0.4, b: 0.2).scaled(2.0).r, 1.0, accuracy: 0.001)
     }
 }
