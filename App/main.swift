@@ -1,4 +1,5 @@
 import AppKit
+import ServiceManagement
 
 struct RunOptions {
     var window = false
@@ -38,6 +39,18 @@ struct RunOptions {
 }
 
 let options = RunOptions.parse(CommandLine.arguments)
+
+if options.installLoginItem {
+    do {
+        try SMAppService.mainApp.register()
+        print("registered as login item")
+        exit(0)
+    } catch {
+        print("login item registration failed: \(error)")
+        exit(1)
+    }
+}
+
 let app = NSApplication.shared
 let delegate = AppDelegate(options: options)
 app.delegate = delegate

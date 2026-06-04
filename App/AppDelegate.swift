@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var displayManager: DisplayManager?
     private var demoTimer: Timer?
     private var configWatcher: DispatchSourceFileSystemObject?
+    private var gateway: GatewayClient?
 
     init(options: RunOptions) {
         self.options = options
@@ -26,13 +27,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let epoch = CACurrentMediaTime()
         let clock: () -> TimeInterval = { CACurrentMediaTime() - epoch }
 
-        // Until the gateway is wired (Task 17), pretend we're connected so
-        // the idle face shows.
-        director.handle(.connectionUp, now: clock())
         if options.demo {
+            director.handle(.connectionUp, now: clock())
             startDemo(director: director, clock: clock)
-        } else {
+        } else if options.debugState != nil {
+            director.handle(.connectionUp, now: clock())
             applyDebugState(director: director, clock: clock)
+        } else {
+            let url = URL(string: config.gateway.url)
+                ?? URL(string: GatewayConfig().url)!
+            let gateway = GatewayClient(
+                url: url,
+                token: config.gateway.token,
+                onEvent: { [weak director] event in
+                    DispatchQueue.main.async {
+                        director?.handle(event, now: clock())
+                    }
+                }
+            )
+            self.gateway = gateway
+            gateway.start()
         }
 
         let device = MTLCreateSystemDefaultDevice()!
