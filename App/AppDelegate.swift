@@ -33,8 +33,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             director.handle(.toolStarted(run: "dbg", session: "dbg", tool: "read"), now: clock())
         case "offline":
             director.handle(.connectionDown(auth: false), now: clock())
+        case "speaking":
+            director.handle(.runStarted(run: "dbg", session: "dbg"), now: clock())
+            director.handle(.textDelta(run: "dbg", session: "dbg",
+                text: "The build finished. All 142 tests pass. Deploy went clean. Want me to tag the release? "), now: clock())
         default:
-            break
+            if let s = options.debugState { fputs("warning: unknown --state '\(s)'\n", stderr) }
         }
 
         let device = MTLCreateSystemDefaultDevice()!
@@ -45,6 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let renderer = try! ZielRenderer(
             device: device,
             pixelFormat: mtkView.colorPixelFormat,
+            fontName: config.look.fontName,
             clock: clock,
             sceneProvider: { [weak director] now in
                 director?.tick(now: now)
