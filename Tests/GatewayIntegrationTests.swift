@@ -246,9 +246,9 @@ final class GatewayIntegrationTests: XCTestCase {
 
     func testChannelFramesGatedUntilSubscribe() throws {
         // Channel frames played before the subscribe response is sent must NOT
-        // reach the client. We achieve determinism by using a server that holds
-        // the subscribe response until we explicitly release it, rather than
-        // relying on timing.
+        // reach the client. We achieve determinism by using a server that never
+        // sends the subscribe response, so the connection stays unsubscribed,
+        // rather than relying on timing.
         let sessionKey = "agent:main:whatsapp:direct:+353838112174"
         let runId = "gated-run-1"
 
@@ -263,7 +263,7 @@ final class GatewayIntegrationTests: XCTestCase {
 
         let server = try MockGatewayServer(requestedPort: 0, expectToken: "tok",
                                            steps: preSubscribeSteps,
-                                           holdSubscribeResponse: true)
+                                           dropSubscribeResponse: true)
         try server.start()
         defer { server.stop() }
 

@@ -12,13 +12,14 @@ public final class MockGatewayServer {
     private let queue = DispatchQueue(label: "mock-gateway")
     private var connections: [NWConnection] = []
 
-    /// When true, the server queues the sessions.subscribe response but never
-    /// sends it, proving that channel frames sent before subscription are gated.
-    private let holdSubscribeResponse: Bool
+    /// When true, the server never sends the sessions.subscribe response,
+    /// proving that channel frames sent before subscription are gated.
+    private let dropSubscribeResponse: Bool
 
     /// True once any client has sent a sessions.subscribe request.
-    /// Readable from any thread after the test polling loop completes.
-    public private(set) var didReceiveSubscribe: Bool = false
+    /// Serialized through `queue` so cross-thread reads have a happens-before edge.
+    private var _didReceiveSubscribe = false
+    public var didReceiveSubscribe: Bool { queue.sync { _didReceiveSubscribe } }
 
     /// Tracks which connections have successfully subscribed (by ObjectIdentifier).
     private var subscribedConnections: Set<ObjectIdentifier> = []
@@ -28,11 +29,11 @@ public final class MockGatewayServer {
 
     public init(requestedPort: UInt16, expectToken: String? = nil,
                 requireDeviceAuth: Bool = false, steps: [MockStep],
-                holdSubscribeResponse: Bool = false) throws {
+                dropSubscribeResponse: Bool = false) throws {
         self.expectToken = expectToken
         self.requireDeviceAuth = requireDeviceAuth
         self.steps = steps
-        self.holdSubscribeResponse = holdSubscribeResponse
+        self.dropSubscribeResponse = dropSubscribeResponse
         let params = NWParameters.tcp
         let ws = NWProtocolWebSocket.Options()
         ws.autoReplyPing = true
@@ -157,15 +158,16 @@ public final class MockGatewayServer {
                obj["type"] as? String == "req", let id = obj["id"] as? String {
                 let method = obj["method"] as? String
                 if method == "sessions.subscribe" {
-                    self.didReceiveSubscribe = true
-                    if !self.holdSubscribeResponse {
+                    // On `queue` (receiveMessage callbacks run there) — safe write.
+                    self._didReceiveSubscribe = true
+                    if !self.dropSubscribeResponse {
                         self.subscribedConnections.insert(ObjectIdentifier(conn))
                         self.send(conn, obj: [
                             "type": "res", "id": id, "ok": true,
                             "payload": ["subscribed": true],
                         ])
                     }
-                    // holdSubscribeResponse == true: swallow the response entirely,
+                    // dropSubscribeResponse == true: swallow the response entirely,
                     // proving that channel frames queued before subscription are
                     // never delivered (the connection stays in unsubscribed state).
                 } else {
@@ -267,7 +269,7 @@ public enum MockFrames {
         ["type": "event", "event": "session.message",
          "payload": [
              "sessionKey": sessionKey,
-             "messageId": "user-msg-\(sessionKey.hashValue)",
+             "messageId": "user-msg",
              "message": ["role": "user", "content": text],
          ]]
     }
