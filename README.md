@@ -5,6 +5,16 @@ Macintosh; this app completes it: the happy-Mac face idles on a simulated
 phosphor tube, wakes amber when OpenClaw thinks, and speaks replies one big
 glowing word at a time.
 
+## What it looks like
+
+| Idle | Thinking |
+|---|---|
+| ![Idle — green happy-Mac face](docs/screenshots/idle.png) | ![Thinking — amber face with activity hint](docs/screenshots/thinking.png) |
+
+| Speaking | Demo under the CRT pipeline |
+|---|---|
+| ![Speaking — one big RSVP word](docs/screenshots/speaking.png) | ![Demo — CRT scanlines, bloom, afterglow](docs/screenshots/demo-crt.png) |
+
 ## Build
 
     brew install xcodegen
@@ -39,3 +49,7 @@ Config is watched: shader knobs and pacing reload live while the app runs
 | `--state thinking\|speaking\|offline` | jump to a state for tuning |
 | `--config <path>` | alternate config file |
 | `--install-login-item` | register for launch at login |
+
+## License
+
+MIT — see [LICENSE](LICENSE).
