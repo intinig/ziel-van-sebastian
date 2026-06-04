@@ -9,13 +9,16 @@ public enum OpenClawTranslator {
             obj["type"] as? String == "event",
             obj["event"] as? String == "agent",
             let payload = obj["payload"] as? [String: Any],
-            let runId = payload["runId"] as? String,
+            let runId = payload["runId"] as? String, !runId.isEmpty,
             let stream = payload["stream"] as? String
         else { return [] }
 
+        // NSNumber bridging means a JSON 1/true both read as Bool true here —
+        // desirable (heartbeats dropped either way); don't "fix" to JSONDecoder.
         if (payload["isHeartbeat"] as? Bool) == true { return [] }
 
-        let session = (payload["sessionKey"] as? String) ?? runId
+        let sessionKey = payload["sessionKey"] as? String
+        let session = (sessionKey?.isEmpty == false) ? sessionKey! : runId
         let body = payload["data"] as? [String: Any] ?? [:]
 
         switch stream {

@@ -55,4 +55,14 @@ final class TranslatorTests: XCTestCase {
         XCTAssertEqual(translate("not json at all {{{"), [])
         XCTAssertEqual(translate(#"{"type":"event","event":"agent","payload":{"stream":"assistant"}}"#), [])
     }
+
+    func testEmptyRunIdDropped() {
+        XCTAssertEqual(translate(#"{"type":"event","event":"agent","payload":{"runId":"","seq":0,"stream":"lifecycle","ts":1,"data":{"phase":"start"}}}"#), [])
+    }
+
+    func testEmptySessionKeyFallsBackToRunId() {
+        XCTAssertEqual(
+            translate(#"{"type":"event","event":"agent","payload":{"runId":"r3","seq":0,"stream":"lifecycle","ts":1,"sessionKey":"","data":{"phase":"start"}}}"#),
+            [.runStarted(run: "r3", session: "r3")])
+    }
 }
