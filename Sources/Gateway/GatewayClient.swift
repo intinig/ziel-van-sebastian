@@ -80,7 +80,10 @@ public final class GatewayClient: NSObject, URLSessionWebSocketDelegate {
             "params": [
                 "minProtocol": 3, "maxProtocol": 4,
                 "client": ["id": "gateway-client", "version": "1.0.0",
-                           "platform": "macos", "mode": "operator"],
+                           // "ui" verified against OpenClaw 2026.6.1 — the
+                           // released mode enum differs from main-branch docs
+                           // ("operator" is rejected with INVALID_REQUEST).
+                           "platform": "macos", "mode": "ui"],
                 "role": "operator",
                 "scopes": ["operator.read"],
                 "auth": ["token": token],
