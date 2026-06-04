@@ -8,6 +8,7 @@ final class ZielRenderer: NSObject, MTKViewDelegate {
     let queue: MTLCommandQueue
     let scenePass: ScenePass
     let glyphs: GlyphRasterizer
+    let crt: CRTPipeline
     /// Monotonic app clock, shared with the Director's event timestamps.
     let clock: () -> TimeInterval
     /// Pulls the current scene; wired to Director.tick by the app.
@@ -15,6 +16,7 @@ final class ZielRenderer: NSObject, MTKViewDelegate {
 
     init(device: MTLDevice, pixelFormat: MTLPixelFormat,
          fontName: String,
+         shaderConfig: ShaderConfig,
          clock: @escaping () -> TimeInterval,
          sceneProvider: @escaping (TimeInterval) -> SceneState) throws {
         self.device = device
@@ -22,6 +24,8 @@ final class ZielRenderer: NSObject, MTKViewDelegate {
         let library = try device.makeDefaultLibrary(bundle: .main)
         self.scenePass = try ScenePass(device: device, library: library, pixelFormat: pixelFormat)
         self.glyphs = GlyphRasterizer(device: device, fontName: fontName)
+        self.crt = try CRTPipeline(device: device, library: library,
+                                   drawableFormat: pixelFormat, shaderConfig: shaderConfig)
         self.clock = clock
         self.sceneProvider = sceneProvider
         super.init()
@@ -31,19 +35,28 @@ final class ZielRenderer: NSObject, MTKViewDelegate {
 
     func draw(in view: MTKView) {
         guard let drawable = view.currentDrawable,
-              let rpd = view.currentRenderPassDescriptor,
+              let drawableRPD = view.currentRenderPassDescriptor,
               let cmd = queue.makeCommandBuffer() else { return }
+
+        crt.resize(view.drawableSize)
 
         let now = clock()
         let scene = sceneProvider(now)
-        rpd.colorAttachments[0].clearColor = MTLClearColor(red: 0.012, green: 0.012, blue: 0.012, alpha: 1)
 
-        if let encoder = cmd.makeRenderCommandEncoder(descriptor: rpd) {
+        let sceneRPD = MTLRenderPassDescriptor()
+        sceneRPD.colorAttachments[0].texture = crt.sceneTex
+        sceneRPD.colorAttachments[0].loadAction = .clear
+        sceneRPD.colorAttachments[0].storeAction = .store
+        sceneRPD.colorAttachments[0].clearColor = MTLClearColor(red: 0.012, green: 0.012, blue: 0.012, alpha: 1)
+        if let enc = cmd.makeRenderCommandEncoder(descriptor: sceneRPD) {
             let w = Double(view.drawableSize.width)
             let h = Double(view.drawableSize.height)
-            drawScene(scene, now: now, encoder: encoder, viewW: w, viewH: h)
-            encoder.endEncoding()
+            drawScene(scene, now: now, encoder: enc, viewW: w, viewH: h)
+            enc.endEncoding()
         }
+
+        crt.run(cmd: cmd, drawableRPD: drawableRPD, time: Float(now))
+
         cmd.present(drawable)
         cmd.commit()
     }

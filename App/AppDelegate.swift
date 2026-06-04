@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var director: Director?
     var config = ZielConfig()
     private var demoTimer: Timer?
+    private var configWatcher: DispatchSourceFileSystemObject?
 
     init(options: RunOptions) {
         self.options = options
@@ -42,6 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             device: device,
             pixelFormat: mtkView.colorPixelFormat,
             fontName: config.look.fontName,
+            shaderConfig: config.look.shader,
             clock: clock,
             sceneProvider: { [weak director] now in
                 director?.tick(now: now)
@@ -71,6 +73,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         self.window = window
+
+        watchConfig(at: configURL, renderer: renderer, director: director)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
@@ -94,7 +98,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func startDemo(director: Director, clock: @escaping () -> TimeInterval) {
         var cursor = 0
         var loopStart = clock()
-        demoTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
+        // director lives for app lifetime — strong capture is intentional
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
             let now = clock()
             let t = now - loopStart
             while cursor < DemoScript.sequence.count && DemoScript.sequence[cursor].at <= t {
@@ -106,5 +111,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 loopStart = now
             }
         }
+        timer.tolerance = 0.005
+        demoTimer = timer
+    }
+
+    private func watchConfig(at url: URL, renderer: ZielRenderer, director: Director) {
+        let fd = open(url.path, O_EVTONLY)
+        guard fd >= 0 else { return }   // no file yet; defaults in use
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd, eventMask: [.write, .delete, .rename], queue: .main)
+        source.setEventHandler { [weak self] in
+            // Keep last-good config when the file is mid-edit or invalid.
+            if let data = try? Data(contentsOf: url),
+               let fresh = try? ZielConfig.decode(data) {
+                self?.config = fresh
+                renderer.crt.shaderConfig = fresh.look.shader
+                director.updatePacing(fresh.pacing)
+            }
+            // Editors often replace the file: re-arm the watcher.
+            source.cancel()
+            self?.watchConfig(at: url, renderer: renderer, director: director)
+        }
+        source.setCancelHandler { close(fd) }
+        source.resume()
+        configWatcher = source
     }
 }
