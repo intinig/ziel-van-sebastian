@@ -48,6 +48,7 @@ final class ScenePass {
     }
 
     /// offsets in grid units; scales are multipliers around centers.
+    /// eyeOffset is in PRE-breathe grid space — breathe scaling is applied after, so offsets amplify by ±2% at breathe extremes (intentional, imperceptible).
     func drawFace(encoder: MTLRenderCommandEncoder,
                   viewW: Double, viewH: Double,
                   tint: ColorRGB, alpha: Double,
@@ -126,6 +127,7 @@ final class ScenePass {
     func drawGlyphQuad(encoder: MTLRenderCommandEncoder, texture: MTLTexture,
                        center: (x: Float, y: Float), half: (w: Float, h: Float),
                        tint: ColorRGB, alpha: Double) {
+        // Texture v=0 is the TOP of the glyph (Metal texture origin top-left), while NDC y grows upward — hence v flipped relative to y.
         let v: [TexQuadVertex] = [
             .init(x: center.x - half.w, y: center.y - half.h, u: 0, v: 1),
             .init(x: center.x + half.w, y: center.y - half.h, u: 1, v: 1),

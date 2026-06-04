@@ -48,7 +48,45 @@ final class ZielRenderer: NSObject, MTKViewDelegate {
     /// Task 11: static face. Animations layer in over Tasks 12–13.
     func drawScene(_ scene: SceneState, now: TimeInterval,
                    encoder: MTLRenderCommandEncoder, viewW: Double, viewH: Double) {
-        scenePass.drawFace(encoder: encoder, viewW: viewW, viewH: viewH,
-                           tint: scene.tint, alpha: 1.0)
+        switch scene.phase {
+        case .idle, .waking, .offline:
+            let dozing = scene.dozing
+            let isOffline: Bool
+            if case .offline = scene.phase { isOffline = true } else { isOffline = false }
+            let blink: Double
+            if dozing || isOffline {
+                blink = 0.08
+            } else if scene.phase == .waking {
+                blink = FaceAnimation.wakeBlinkScale(progress: scene.phaseProgress)
+            } else {
+                blink = FaceAnimation.blinkScale(at: now)
+            }
+            let wander = (dozing || isOffline || scene.phase == .waking) ? 0 : FaceAnimation.wanderOffset(at: now)
+            scenePass.drawFace(encoder: encoder, viewW: viewW, viewH: viewH,
+                               tint: scene.tint, alpha: 1.0,
+                               faceOffset: (dx: wander, dy: 0),
+                               breatheScale: FaceAnimation.breatheScale(at: now),
+                               eyeBlinkScale: blink)
+
+        case .thinking:
+            scenePass.drawSweep(encoder: encoder,
+                                y: FaceAnimation.sweepY(at: now),
+                                tint: scene.tint, intensity: 0.10)
+            let up = FaceAnimation.eyesUpOffset(at: now)
+            scenePass.drawFace(encoder: encoder, viewW: viewW, viewH: viewH,
+                               tint: scene.tint, alpha: 1.0,
+                               breatheScale: FaceAnimation.breatheScale(at: now),
+                               eyeBlinkScale: FaceAnimation.blinkScale(at: now),
+                               eyeOffset: up)
+
+        case .speaking:
+            // Word quad arrives in Task 13.
+            break
+
+        case .settling:
+            scenePass.drawFace(encoder: encoder, viewW: viewW, viewH: viewH,
+                               tint: scene.tint, alpha: scene.phaseProgress,
+                               breatheScale: FaceAnimation.breatheScale(at: now))
+        }
     }
 }

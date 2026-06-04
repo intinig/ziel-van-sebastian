@@ -27,6 +27,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the idle face shows.
         director.handle(.connectionUp, now: clock())
 
+        switch options.debugState {
+        case "thinking":
+            director.handle(.runStarted(run: "dbg", session: "dbg"), now: clock())
+            director.handle(.toolStarted(run: "dbg", session: "dbg", tool: "read"), now: clock())
+        case "offline":
+            director.handle(.connectionDown(auth: false), now: clock())
+        default:
+            break
+        }
+
         let device = MTLCreateSystemDefaultDevice()!
         let mtkView = MTKView(frame: .zero, device: device)
         mtkView.preferredFramesPerSecond = 60

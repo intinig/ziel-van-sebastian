@@ -5,6 +5,7 @@ struct RunOptions {
     var demo = false
     var configPath: String?
     var installLoginItem = false
+    var debugState: String?
 
     static func parse(_ args: [String]) -> RunOptions {
         var o = RunOptions()
@@ -22,6 +23,9 @@ struct RunOptions {
                     fputs("error: --config requires a path argument\n", stderr)
                     exit(1)
                 }
+            case "--state":
+                i += 1
+                if i < args.count { o.debugState = args[i] }
             case "--version":
                 print("ziel-van-sebastian 0.1.0")
                 exit(0)
