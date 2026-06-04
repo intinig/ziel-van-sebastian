@@ -13,8 +13,8 @@ while !args.isEmpty {
     let a = args.removeFirst()
     switch a {
     case "--port":
-        guard !args.isEmpty else { usage() }
-        port = UInt16(args.removeFirst()) ?? 18789
+        guard !args.isEmpty, let p = UInt16(args.removeFirst()) else { usage() }
+        port = p
     case "--scenario":
         guard !args.isEmpty else { usage() }
         scenarioPath = args.removeFirst()

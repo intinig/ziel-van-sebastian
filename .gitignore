@@ -6,6 +6,7 @@ config.json
 # Session/tooling state
 .superpowers/
 .remember/
+.serena/
 .DS_Store
 
 # Build artifacts

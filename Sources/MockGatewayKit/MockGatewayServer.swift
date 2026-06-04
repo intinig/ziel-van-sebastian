@@ -63,8 +63,17 @@ public final class MockGatewayServer {
 
     private func accept(_ conn: NWConnection) {
         connections.append(conn)
+        conn.stateUpdateHandler = { [weak self, weak conn] state in
+            if case .cancelled = state { self?.prune(conn) }
+            if case .failed = state { self?.prune(conn) }
+        }
         conn.start(queue: queue)
         receiveHandshake(conn)
+    }
+
+    private func prune(_ conn: NWConnection?) {
+        guard let conn else { return }
+        connections.removeAll { $0 === conn }
     }
 
     private func receiveHandshake(_ conn: NWConnection) {
@@ -129,6 +138,7 @@ public final class MockGatewayServer {
     }
 
     private func send(_ conn: NWConnection, obj: [String: Any]) {
+        // inputs are always literal dictionaries — serialisation cannot fail
         sendData(conn, try! JSONSerialization.data(withJSONObject: obj))
     }
 

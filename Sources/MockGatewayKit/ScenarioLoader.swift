@@ -15,6 +15,7 @@ public struct MockStep {
 
     /// Convenience: build a step from a JSON-shaped dictionary.
     public static func send(_ obj: [String: Any], afterMs delay: Int) -> MockStep {
+        // inputs are always literal dictionaries — serialisation cannot fail
         MockStep(delayMs: delay, frame: try! JSONSerialization.data(withJSONObject: obj))
     }
 }
