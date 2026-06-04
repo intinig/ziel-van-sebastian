@@ -2,6 +2,7 @@
 .env
 .env.*
 config.json
+output.log
 
 # Session/tooling state
 .superpowers/

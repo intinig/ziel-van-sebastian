@@ -13,6 +13,8 @@ cd "$(dirname "$0")/.."
 PORT=18789
 HOST="${GATEWAY_SSH_HOST:-admin@vm-claw}"
 MODE="${1:-ui}"
+LISTEN="${2:-0}"   # seconds to stay connected and dump broadcast frames
+SUB="${3:-all}"    # sessions.subscribe shape: both | all (empty params) | keys
 
 # --- 1. tunnel -------------------------------------------------------------
 if ! nc -z 127.0.0.1 "$PORT" 2>/dev/null; then
@@ -44,4 +46,4 @@ fi
 export GATEWAY_TOKEN
 
 # --- 3. probe ---------------------------------------------------------------
-exec swift scripts/probe-gateway.swift "ws://127.0.0.1:$PORT" "$MODE"
+exec swift scripts/probe-gateway.swift "ws://127.0.0.1:$PORT" "$MODE" "$LISTEN" "$SUB"

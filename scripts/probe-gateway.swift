@@ -23,6 +23,13 @@ else {
     exit(2)
 }
 let mode = args.count > 2 ? args[2] : "ui"
+// Optional 4th arg: stay connected after the handshake and dump every frame
+// for N seconds (diagnoses whether the gateway broadcasts agent events to us).
+let listenSeconds = args.count > 3 ? (Double(args[3]) ?? 0) : 0
+// Optional 5th arg: which sessions.subscribe shape to send — "both" (default),
+// "all" (empty params only), or "keys" (one req per snapshot session key).
+let subMode = args.count > 4 ? args[4] : "all"
+var eventCounts: [String: Int] = [:]
 
 // MARK: - Device identity (same format as Sources/Gateway/DeviceIdentity.swift)
 
@@ -137,6 +144,16 @@ func sendConnect(nonce: String) {
     }
 }
 
+func sendReq(id: String, method: String, params: [String: Any]) {
+    let frame: [String: Any] = ["type": "req", "id": id, "method": method, "params": params]
+    let data = try! JSONSerialization.data(withJSONObject: frame)
+    let text = String(data: data, encoding: .utf8)!
+    print(">> \(redact(text))")
+    task.send(.string(text)) { error in
+        if let error { print("send \(id) failed: \(error.localizedDescription)") }
+    }
+}
+
 func verdict(for response: [String: Any]) {
     guard response["ok"] as? Bool == true else {
         let error = findKey("error", in: response).first.map { "\($0.value)" } ?? "unknown error"
@@ -157,6 +174,26 @@ func verdict(for response: [String: Any]) {
     for hit in scopeHits { print("  \(hit.path) = \(hit.value)") }
     if granted.contains("operator.read") {
         print("\nVERDICT: SCOPES GRANTED ✓ — device pairing works; the app can use mode \"\(mode)\".")
+        if listenSeconds > 0 {
+            let keys = Set(findKey("key", in: response)
+                .compactMap { $0.value as? String }
+                .filter { $0.hasPrefix("agent:") })
+            print("\nsubscribing (mode \(subMode)): empty-params=\(subMode != "keys"), per-key=\(subMode != "all") × \(keys.count)…")
+            if subMode != "keys" {
+                sendReq(id: "sub-all", method: "sessions.subscribe", params: [:])
+            }
+            if subMode != "all" {
+                for (i, key) in keys.sorted().enumerated() {
+                    sendReq(id: "sub-\(i)", method: "sessions.subscribe", params: ["sessionKey": key])
+                }
+            }
+            print("listening for \(Int(listenSeconds))s — trigger a run / send a channel message now…\n")
+            DispatchQueue.global().asyncAfter(deadline: .now() + listenSeconds) {
+                print("\n--- listen window over. events seen: \(eventCounts.isEmpty ? "NONE" : "\(eventCounts)")")
+                exit(0)
+            }
+            return
+        }
         exit(0)
     } else if scopeHits.isEmpty {
         print("\nVERDICT: handshake ok but no scopes field found — paste this output back for analysis.")
@@ -184,6 +221,7 @@ func receiveLoop() {
             }
             print("<< \(redact(text))")
             if let obj = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any] {
+                if let event = obj["event"] as? String { eventCounts[event, default: 0] += 1 }
                 if obj["type"] as? String == "event",
                    obj["event"] as? String == "connect.challenge",
                    let payload = obj["payload"] as? [String: Any],
@@ -199,7 +237,7 @@ func receiveLoop() {
 }
 receiveLoop()
 
-// Give the gateway up to 10s (challenge + response).
-RunLoop.main.run(until: Date().addingTimeInterval(10))
+// Give the gateway up to 10s (challenge + response), plus any listen window.
+RunLoop.main.run(until: Date().addingTimeInterval(10 + listenSeconds))
 print("\nVERDICT: no connect.challenge/response within 10s — paste output back for analysis.")
 exit(1)
