@@ -5,6 +5,8 @@ Macintosh; this app completes it: the happy-Mac face idles on a simulated
 phosphor tube, wakes amber when OpenClaw thinks, and speaks replies one big
 glowing word at a time.
 
+![Demo — full lifecycle under the CRT pipeline](docs/screenshots/demo.gif)
+
 ## What it looks like
 
 | Idle | Thinking |
