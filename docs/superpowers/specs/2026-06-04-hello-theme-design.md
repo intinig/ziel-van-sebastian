@@ -33,7 +33,7 @@ background, shadow, and CRT shader parameters. Two built-in themes are defined i
 | `fontName` | `Menlo-Bold` | `Menlo-Bold` |
 | `background` | `#030303` (current 0.012 clear color) | `#26271f` (unlit-phosphor gray) |
 | `shadowColor` | none (shadow disabled) | `#0e0f0b` |
-| `shadowOffsetXPx` / `shadowOffsetYPx` | 0 / 0 | 3 / 4 (scene-texture pixels, down-right) |
+| `shadowOffsetX` / `shadowOffsetY` | 0 / 0 | 0.6 / 0.75 (face-grid pixels, down-right) |
 | `shader.maskIntensity` | 0.25 | 0.0 (monochrome CRT — no RGB triads) |
 | `shader.bloomStrength` | 0.55 | 0.4 |
 | `shader.*` (all others) | current defaults | same as classic |
@@ -65,7 +65,10 @@ the valid names — never a silent fallback.
   look (theme + overlay) is computed once at startup and passed to the renderer/director
   as today.
 - New `look` keys: `theme` (string), `background`, `shadowColor`,
-  `shadowOffsetXPx`, `shadowOffsetYPx`.
+  `shadowOffsetX`, `shadowOffsetY`. Shadow offsets are in **face-grid pixels**
+  (the pixel-art unit, `FaceTransform.gridPixel`), not device pixels: a fixed
+  device-pixel offset would vanish on a retina/4K drawable, while grid units keep
+  the approved mockup proportions (~3.5% / 4.5% of face size) at any resolution.
 - `config.example.json`: `look` block reduced to `{"theme": "hello"}` so the example no
   longer duplicates (and silently pins) theme values. Override usage is documented in the
   README Themes section instead (JSON allows no comments).
