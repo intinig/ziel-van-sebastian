@@ -83,6 +83,24 @@ public final class Director {
         lastActivity = now
     }
 
+    /// Audio playback for sentence `id` began at `now`; `words` are timed
+    /// relative to that instant.
+    public func speechStarted(id: Int, words: [WordTiming], now: TimeInterval) {
+        guard let i = speechQueue.firstIndex(where: { $0.id == id }) else { return }
+        speechQueue[i].status = .playing
+        speechQueue[i].words = words
+        speechQueue[i].startedAt = now
+        lastActivity = now
+    }
+
+    /// Audio playback for sentence `id` finished. If it wasn't the queue head
+    /// (rare race behind a failed sentence), its words are skipped — the voice
+    /// already said them.
+    public func speechFinished(id: Int, now: TimeInterval) {
+        speechQueue.removeAll { $0.id == id }
+        lastActivity = now
+    }
+
     /// Number of tracked runs — for tests and diagnostics only.
     public var runCount: Int { runs.count }
 
@@ -232,8 +250,10 @@ public final class Director {
                 advance(now: now)   // may immediately start speaking
             }
         case .thinking:
-            if startNextWord(now: now) {
+            processFailedSpeech()
+            if startNextWord(now: now) || timelineForHead != nil {
                 go(.speaking, now: now)
+                if currentWord == nil { _ = updateTimelineWord(now: now) }
                 return
             }
             // The focused run may have died with nothing queued — release it so
@@ -250,13 +270,16 @@ public final class Director {
                 go(.settling, now: now)
             }
         case .speaking:
-            guard let word = currentWord else {
-                if !startNextWord(now: now) { finishSpeaking(now: now) }
+            processFailedSpeech()
+            // A pacer word (speech off, or fallback text) holds for its duration.
+            if wordFromPacer, let word = currentWord,
+               (now - wordStart) * 1000 < word.holdMs {
                 return
             }
-            if (now - wordStart) * 1000 >= word.holdMs {
-                if !startNextWord(now: now) { finishSpeaking(now: now) }
-            }
+            if startNextWord(now: now) { return }
+            if updateTimelineWord(now: now) { return }
+            if speechBusy { return }   // between sentences: hold the last word
+            finishSpeaking(now: now)
         case .settling:
             if now - phaseStart >= behavior.settlingSeconds {
                 go(.idle, now: now)
@@ -270,9 +293,41 @@ public final class Director {
         if let next = pacer.nextWord() {
             currentWord = next
             wordStart = now
+            wordFromPacer = true
             return true
         }
         return false
+    }
+
+    private var timelineForHead: (startedAt: TimeInterval, words: [WordTiming])? {
+        guard let head = speechQueue.first, head.status == .playing else { return nil }
+        return (head.startedAt, head.words)
+    }
+
+    /// Failed sentences at the queue head display via the pacer, in order.
+    private func processFailedSpeech() {
+        while let head = speechQueue.first, head.status == .failed {
+            speechQueue.removeFirst()
+            pacer.feed(head.text)
+            pacer.endOfText()
+        }
+    }
+
+    /// Audio-clock word selection: picks the word whose start has passed.
+    /// Returns true while a timeline is active (display follows the voice).
+    private func updateTimelineWord(now: TimeInterval) -> Bool {
+        guard let (startedAt, words) = timelineForHead, !words.isEmpty else { return false }
+        let t = now - startedAt
+        if let idx = words.lastIndex(where: { $0.start <= t }) {
+            let w = words[idx]
+            let start = startedAt + w.start
+            if currentWord?.text != w.text || wordStart != start {
+                currentWord = PacedWord(text: w.text, holdMs: (w.end - w.start) * 1000)
+                wordStart = start
+                wordFromPacer = false
+            }
+        }
+        return true
     }
 
     private func finishSpeaking(now: TimeInterval) {
