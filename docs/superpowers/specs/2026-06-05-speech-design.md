@@ -16,7 +16,7 @@ The original idea was shelling out to [sag](https://github.com/steipete/sag/), a
 | Character-level timestamps | `POST /v1/text-to-speech/{voice_id}/stream/with-timestamps` | Streamed JSON chunks of base64 audio + per-character timing → word timings → true audio/display sync |
 | Streaming text input | `WSS /v1/text-to-speech/{voice_id}/stream-input` | Feed text deltas as they arrive |
 
-Decision: **HTTP `stream/with-timestamps`, one request per sentence.** True sync with moderate complexity; no subprocess, no external binary on the appliance. The WebSocket variant is the upgrade path if per-sentence latency ever disappoints. The official ElevenLabs Swift SDK was evaluated and rejected — it targets their conversational-agents product (LiveKit WebRTC, microphone-driven), not raw TTS.
+Decision: **HTTP `with-timestamps` (non-streaming variant), one request per sentence.** True sync with moderate complexity; no subprocess, no external binary on the appliance. The non-streaming variant is deliberate: the Director needs the complete word timeline before playback starts, sentences are short, and per-sentence pipelining already hides generation latency — streamed chunks would only shave ~100 ms off the first sentence at the cost of incremental-alignment plumbing. The WebSocket variant is the upgrade path if per-sentence latency ever disappoints. The official ElevenLabs Swift SDK was evaluated and rejected — it targets their conversational-agents product (LiveKit WebRTC, microphone-driven), not raw TTS.
 
 ## Data Flow
 
@@ -24,7 +24,7 @@ Decision: **HTTP `stream/with-timestamps`, one request per sentence.** True sync
 textDelta ─► Director.route ──(speech off)──► WordPacer (today's path, unchanged)
                     │
                     └─(speech on)──► SentenceChunker ─► SpeechCoordinator (App side)
-                                                            │  POST /stream/with-timestamps
+                                                            │  POST /with-timestamps
                                                             │  per sentence, queued in order
                                                             ▼
                                               audio chunks + char alignment
@@ -51,7 +51,7 @@ textDelta ─► Director.route ──(speech off)──► WordPacer (today's p
 
 ## New `Sources/Speech` Target
 
-- **`ElevenLabsTTS`** — URLSession streaming request to `/v1/text-to-speech/{voice_id}/stream/with-timestamps`, parses the JSON chunk stream, base64-decodes PCM, schedules buffers on `AVAudioEngine`.
+- **`ElevenLabsTTS`** — URLSession request to `/v1/text-to-speech/{voice_id}/with-timestamps`, decodes `audio_base64` + alignment, converts PCM, schedules buffers on `AVAudioEngine`.
 - **`SpeechCoordinator`** — owns the sentence queue, request pipelining, ordering, and fallback signaling to the Director.
 - **Protocol seam** (`SpeechSynthesizing`) so coordinator logic tests against a fake — same pattern as the gateway/mock split.
 - AVFoundation stays out of `Sources/Core` (which remains platform-free).
@@ -87,7 +87,7 @@ Audio must never block the face. Every failure degrades to today's display behav
 
 - Missing/invalid key or voice → log once, speech disabled for the session.
 - Per-sentence request failure or timeout (~10 s) → pacer fallback for that sentence only; subsequent sentences retry speech.
-- Mid-stream audio error → stop playback, pacer fallback for remaining text of that sentence.
+- Undecodable or empty response → treated as a request failure (pacer fallback for that sentence).
 
 ## Testing
 
