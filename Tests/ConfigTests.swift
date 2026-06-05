@@ -53,4 +53,31 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(r.shader.persistence, 0.82, accuracy: 0.0001)  // theme survives
         XCTAssertEqual(r.idleTint, "#8a877c")                          // theme survives
     }
+
+    func testSpeechConfigDefaults() throws {
+        let cfg = try ZielConfig.decode(Data("{}".utf8))
+        XCTAssertFalse(cfg.speech.enabled)
+        XCTAssertEqual(cfg.speech.apiKey, "")
+        XCTAssertEqual(cfg.speech.voiceId, "")
+        XCTAssertEqual(cfg.speech.modelId, "eleven_flash_v2_5")
+        XCTAssertNil(cfg.speech.languageCode)
+        XCTAssertEqual(cfg.speech.speed, 1.0)
+        XCTAssertEqual(cfg.speech.volume, 1.0)
+    }
+
+    func testSpeechConfigDecodes() throws {
+        let json = """
+        {"speech": {"enabled": true, "apiKey": "k", "voiceId": "v",
+                    "modelId": "eleven_multilingual_v2", "languageCode": "it",
+                    "speed": 1.1, "volume": 0.8}}
+        """
+        let cfg = try ZielConfig.decode(Data(json.utf8))
+        XCTAssertTrue(cfg.speech.enabled)
+        XCTAssertEqual(cfg.speech.apiKey, "k")
+        XCTAssertEqual(cfg.speech.voiceId, "v")
+        XCTAssertEqual(cfg.speech.modelId, "eleven_multilingual_v2")
+        XCTAssertEqual(cfg.speech.languageCode, "it")
+        XCTAssertEqual(cfg.speech.speed, 1.1)
+        XCTAssertEqual(cfg.speech.volume, 0.8)
+    }
 }
