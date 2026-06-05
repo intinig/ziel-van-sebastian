@@ -88,8 +88,11 @@ final class SpeechCoordinatorTests: XCTestCase {
         d.handle(.connectionUp, now: 0)
         d.handle(.textDelta(run: "r", session: "m", text: "One. Two. Three. "), now: 0.1)
         co.pump()
-        XCTAssertEqual(synth.fetches.count, 3)
-        for f in synth.fetches { f.completion(.failure(NSError(domain: "t", code: 1))) }
+        XCTAssertEqual(synth.fetches.count, 2)               // concurrency cap holds the burst
+        synth.fetches[0].completion(.failure(NSError(domain: "t", code: 1)))
+        synth.fetches[1].completion(.failure(NSError(domain: "t", code: 1)))
+        XCTAssertEqual(synth.fetches.count, 3)               // freed slots fetch the third
+        synth.fetches[2].completion(.failure(NSError(domain: "t", code: 1)))
         d.handle(.textDelta(run: "r", session: "m", text: "Four. "), now: 0.2)
         co.pump()
         XCTAssertEqual(synth.fetches.count, 3)               // circuit open: no new network calls
@@ -112,5 +115,33 @@ final class SpeechCoordinatorTests: XCTestCase {
         XCTAssertEqual(synth.stopped, 1)
         synth.fetches[0].completion(.success(audio([WordTiming(text: "One.", start: 0, end: 0.4)])))
         XCTAssertTrue(synth.played.isEmpty)                  // stale generation dropped
+    }
+
+    func testFetchConcurrencyIsCappedAtTwo() {
+        let d = makeDirector()
+        let synth = FakeSynth()
+        let co = SpeechCoordinator(director: d, synth: synth, volume: 1, now: { 5 })
+        d.handle(.connectionUp, now: 0)
+        d.handle(.textDelta(run: "r", session: "m", text: "One. Two. Three. Four. Five. "), now: 0.1)
+        co.pump()
+        XCTAssertEqual(synth.fetches.count, 2)               // burst capped, not 5 parallel calls
+        synth.fetches[0].completion(.success(audio([WordTiming(text: "One.", start: 0, end: 0.4)])))
+        XCTAssertEqual(synth.fetches.count, 3)               // a slot freed → next fetch starts
+        synth.fetches[1].completion(.failure(NSError(domain: "t", code: 429)))
+        XCTAssertEqual(synth.fetches.count, 4)               // failure also frees its slot
+        XCTAssertEqual(synth.fetches[3].req.text, "Four.")   // strict request order preserved
+    }
+
+    func testCancelAllDropsQueuedFetches() {
+        let d = makeDirector()
+        let synth = FakeSynth()
+        let co = SpeechCoordinator(director: d, synth: synth, volume: 1, now: { 5 })
+        d.handle(.connectionUp, now: 0)
+        d.handle(.textDelta(run: "r", session: "m", text: "One. Two. Three. Four. "), now: 0.1)
+        co.pump()
+        XCTAssertEqual(synth.fetches.count, 2)
+        co.cancelAll()
+        synth.fetches[0].completion(.success(audio([WordTiming(text: "One.", start: 0, end: 0.4)])))
+        XCTAssertEqual(synth.fetches.count, 2)               // queued fetches discarded, none started
     }
 }

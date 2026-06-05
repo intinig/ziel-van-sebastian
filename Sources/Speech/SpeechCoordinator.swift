@@ -5,9 +5,15 @@ import Foundation
 public final class SpeechCoordinator {
     public var volume: Double
 
+    /// ElevenLabs caps concurrent requests per tier (free tier = 2). Fetching
+    /// far ahead buys nothing anyway — playback is serial — so stay at the floor.
+    private static let maxConcurrentFetches = 2
+
     private let director: Director
     private let synth: SpeechSynthesizing
     private let now: () -> TimeInterval
+    private var fetchQueue: [SpeechRequest] = []  // accepted, waiting for a fetch slot
+    private var inFlightFetches = 0
     private var awaitingPlay: [Int] = []          // request ids in arrival order
     private var ready: [Int: SpokenAudio] = [:]   // fetched, not yet played
     private var playing: Int?
@@ -34,11 +40,9 @@ public final class SpeechCoordinator {
                 continue
             }
             awaitingPlay.append(req.id)
-            let gen = generation
-            synth.fetch(req, previousRequestIDs: previousRequestIDs) { [weak self] result in
-                self?.fetchCompleted(id: req.id, generation: gen, result: result)
-            }
+            fetchQueue.append(req)
         }
+        startFetchesWithinCap()
         playNextIfReady()
     }
 
@@ -46,6 +50,8 @@ public final class SpeechCoordinator {
     /// Also re-arms the failure circuit — a reconnect is a fresh start.
     public func cancelAll() {
         generation += 1
+        fetchQueue.removeAll()
+        inFlightFetches = 0
         awaitingPlay.removeAll()
         ready.removeAll()
         playing = nil
@@ -54,8 +60,32 @@ public final class SpeechCoordinator {
         synth.stopPlayback()
     }
 
+    private func startFetchesWithinCap() {
+        if circuitOpen {
+            // A burst still queued behind the cap when the circuit opened:
+            // fall back now so the display never waits on dead requests.
+            for req in fetchQueue {
+                awaitingPlay.removeAll { $0 == req.id }
+                director.speechFailed(id: req.id, now: now())
+            }
+            fetchQueue.removeAll()
+            return
+        }
+        while inFlightFetches < Self.maxConcurrentFetches, !fetchQueue.isEmpty {
+            let req = fetchQueue.removeFirst()
+            inFlightFetches += 1
+            let gen = generation
+            // Fetches already in flight won't carry ids resolved after they
+            // launched — stitching is best-effort by design.
+            synth.fetch(req, previousRequestIDs: previousRequestIDs) { [weak self] result in
+                self?.fetchCompleted(id: req.id, generation: gen, result: result)
+            }
+        }
+    }
+
     private func fetchCompleted(id: Int, generation gen: Int, result: Result<SpokenAudio, Error>) {
         guard gen == generation else { return }
+        inFlightFetches -= 1
         switch result {
         case .success(let audio):
             consecutiveFailures = 0
@@ -72,6 +102,7 @@ public final class SpeechCoordinator {
             awaitingPlay.removeAll { $0 == id }
             director.speechFailed(id: id, now: now())
         }
+        startFetchesWithinCap()
         playNextIfReady()
     }
 
@@ -85,11 +116,11 @@ public final class SpeechCoordinator {
         let gen = generation
         synth.play(audio, volume: volume,
             onStarted: { [weak self] in
-                guard let self = self, gen == self.generation else { return }
+                guard let self, gen == self.generation else { return }
                 self.director.speechStarted(id: head, words: audio.words, now: self.now())
             },
             onFinished: { [weak self] in
-                guard let self = self, gen == self.generation else { return }
+                guard let self, gen == self.generation else { return }
                 self.playing = nil
                 self.director.speechFinished(id: head, now: self.now())
                 self.playNextIfReady()
