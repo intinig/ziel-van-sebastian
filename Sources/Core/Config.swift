@@ -139,12 +139,35 @@ public struct DisplayConfig: Codable, Equatable {
     }
 }
 
+public struct SpeechConfig: Codable, Equatable {
+    public var enabled: Bool = false
+    public var apiKey: String = ""
+    public var voiceId: String = ""
+    public var modelId: String = "eleven_flash_v2_5"
+    public var languageCode: String? = nil
+    public var speed: Double = 1.0
+    public var volume: Double = 1.0
+
+    public init() {}
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? enabled
+        apiKey = try c.decodeIfPresent(String.self, forKey: .apiKey) ?? apiKey
+        voiceId = try c.decodeIfPresent(String.self, forKey: .voiceId) ?? voiceId
+        modelId = try c.decodeIfPresent(String.self, forKey: .modelId) ?? modelId
+        languageCode = try c.decodeIfPresent(String.self, forKey: .languageCode)
+        speed = try c.decodeIfPresent(Double.self, forKey: .speed) ?? speed
+        volume = try c.decodeIfPresent(Double.self, forKey: .volume) ?? volume
+    }
+}
+
 public struct ZielConfig: Codable, Equatable {
     public var gateway: GatewayConfig = GatewayConfig()
     public var pacing: PacingConfig = PacingConfig()
     public var look: LookConfig = LookConfig()
     public var behavior: BehaviorConfig = BehaviorConfig()
     public var display: DisplayConfig = DisplayConfig()
+    public var speech: SpeechConfig = SpeechConfig()
 
     public init() {}
     public init(from decoder: Decoder) throws {
@@ -154,6 +177,7 @@ public struct ZielConfig: Codable, Equatable {
         look = try c.decodeIfPresent(LookConfig.self, forKey: .look) ?? look
         behavior = try c.decodeIfPresent(BehaviorConfig.self, forKey: .behavior) ?? behavior
         display = try c.decodeIfPresent(DisplayConfig.self, forKey: .display) ?? display
+        speech = try c.decodeIfPresent(SpeechConfig.self, forKey: .speech) ?? speech
     }
 
     public static func decode(_ data: Data) throws -> ZielConfig {

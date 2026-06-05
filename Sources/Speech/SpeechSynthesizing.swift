@@ -1,0 +1,27 @@
+import Foundation
+
+/// Fully synthesized sentence: word timings + raw 16-bit little-endian mono PCM.
+public struct SpokenAudio {
+    public let requestID: String?     // ElevenLabs request id, for continuity stitching
+    public let words: [WordTiming]
+    public let pcm: Data
+    public let sampleRate: Double
+
+    public init(requestID: String?, words: [WordTiming], pcm: Data, sampleRate: Double) {
+        self.requestID = requestID
+        self.words = words
+        self.pcm = pcm
+        self.sampleRate = sampleRate
+    }
+}
+
+/// Seam between the coordinator and the real TTS/audio stack.
+/// Contract: ALL callbacks must be invoked on the main thread.
+public protocol SpeechSynthesizing: AnyObject {
+    func fetch(_ request: SpeechRequest, previousRequestIDs: [String],
+               completion: @escaping (Result<SpokenAudio, Error>) -> Void)
+    /// Only one playback at a time; `onFinished` fires when audio is done.
+    func play(_ audio: SpokenAudio, volume: Double,
+              onStarted: @escaping () -> Void, onFinished: @escaping () -> Void)
+    func stopPlayback()
+}

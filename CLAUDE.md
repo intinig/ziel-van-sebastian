@@ -27,6 +27,7 @@ make run                  # windowed demo loop, no gateway needed
 - `Sources/Gateway/` — `GatewayClient` (WS, reconnect) + `OpenClawTranslator` (the ONLY place that knows OpenClaw frames)
 - `Sources/MockGatewayKit/` + `MockGateway/` — in-repo mock gateway server (library + CLI) for tests/demos
 - `Sources/Rendering/` — Metal: scene pass → CRT post-process pipeline
+- `Sources/Speech/` — `SpeechCoordinator` (ordered sentence pipeline) + `ElevenLabsTTS` (with-timestamps fetch, AVAudioEngine playback); seam: `SpeechSynthesizing`
 - `App/` — AppKit shell, DisplayManager (Wokyis panel targeting)
 
 ## Invariants
@@ -35,3 +36,4 @@ make run                  # windowed demo loop, no gateway needed
 - All animation is pure functions of time (`FaceAnimation`) — no stored animation state.
 - Real config (`config.json`, contains the gateway token) NEVER goes in git; `config.example.json` is the committed template.
 - Heartbeat runs (`isHeartbeat: true`) are dropped in the translator — the face must not wake every 30s.
+- **Speech (TTS) is optional and must never block the face** — every failure path (missing key, HTTP error, bad audio) degrades to display-only pacing.
