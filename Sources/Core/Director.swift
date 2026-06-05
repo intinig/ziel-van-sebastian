@@ -251,9 +251,14 @@ public final class Director {
             }
         case .thinking:
             processFailedSpeech()
-            if startNextWord(now: now) || timelineForHead != nil {
+            if startNextWord(now: now) {
                 go(.speaking, now: now)
-                if currentWord == nil { _ = updateTimelineWord(now: now) }
+                return
+            }
+            // Enter speaking only once the voice is actually saying a word —
+            // leading audio silence (words[0].start > 0) stays in thinking.
+            if updateTimelineWord(now: now), currentWord != nil {
+                go(.speaking, now: now)
                 return
             }
             // The focused run may have died with nothing queued — release it so
@@ -299,6 +304,8 @@ public final class Director {
         return false
     }
 
+    /// Deliberately follows only the queue HEAD — relies on the coordinator
+    /// starting playback strictly in queue order (Task 6 contract).
     private var timelineForHead: (startedAt: TimeInterval, words: [WordTiming])? {
         guard let head = speechQueue.first, head.status == .playing else { return nil }
         return (head.startedAt, head.words)

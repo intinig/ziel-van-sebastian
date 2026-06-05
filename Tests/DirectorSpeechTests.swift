@@ -167,4 +167,35 @@ final class DirectorSpeechTests: XCTestCase {
         }
         XCTAssertTrue(saw.contains("Second reply."))
     }
+
+    func testLeadingAudioOffsetKeepsThinkingUntilFirstWord() {
+        let d = makeSpeechDirector()
+        d.handle(.connectionUp, now: 0)
+        d.handle(.textDelta(run: "r1", session: "main", text: "Hi. "), now: 1)
+        d.handle(.runEnded(run: "r1", session: "main"), now: 1.1)
+        let req = d.takeSpeechRequests()[0]
+        _ = d.tick(now: 2)
+        d.speechStarted(id: req.id, words: [WordTiming(text: "Hi.", start: 0.3, end: 0.7)], now: 2.5)
+        let s = d.tick(now: 2.6)            // t=0.1 < 0.3 — leading silence
+        XCTAssertEqual(s.phase, .thinking)  // no word heard yet
+        XCTAssertNil(s.word)
+        let s2 = d.tick(now: 2.85)          // t=0.35 ≥ 0.3
+        XCTAssertEqual(s2.phase, .speaking)
+        XCTAssertEqual(s2.word, "Hi.")
+        d.speechFinished(id: req.id, now: 3.3)
+        XCTAssertEqual(d.tick(now: 3.4).phase, .settling)
+    }
+
+    func testEmptyTimelineDoesNotStrandTheMachine() {
+        let d = makeSpeechDirector()
+        d.handle(.connectionUp, now: 0)
+        d.handle(.textDelta(run: "r1", session: "main", text: "Hi. "), now: 1)
+        d.handle(.runEnded(run: "r1", session: "main"), now: 1.1)
+        let req = d.takeSpeechRequests()[0]
+        _ = d.tick(now: 2)
+        d.speechStarted(id: req.id, words: [], now: 2.5)
+        XCTAssertEqual(d.tick(now: 2.6).phase, .thinking)   // nothing selectable
+        d.speechFinished(id: req.id, now: 3)
+        XCTAssertEqual(d.tick(now: 3.1).phase, .settling)   // recovered
+    }
 }
