@@ -3,9 +3,10 @@
 A CRT soul for a Mac mini appliance. The Wokyis M5 dock looks like a 1984
 Macintosh; this app completes it: the happy-Mac face idles on a simulated
 phosphor tube, wakes amber when OpenClaw thinks, and speaks replies one big
-glowing word at a time. It mirrors every conversation OpenClaw has — direct
-chats stream live, and channel sessions (WhatsApp, iMessage) speak each reply
-as it lands.
+glowing word at a time — literally, if you give it a voice (see
+[Speech](#speech-optional-tts)). It mirrors every conversation OpenClaw has —
+direct chats stream live, and channel sessions (WhatsApp, iMessage) speak each
+reply as it lands.
 
 ![Demo — full lifecycle under the CRT pipeline (hello theme)](docs/screenshots/demo.gif)
 
@@ -59,6 +60,35 @@ Any other `look` key in config acts as an override on top of the active theme �
 
 Config is watched: shader knobs and pacing reload live while the app runs
 (edit the file in place; delete+recreate is not detected until restart).
+
+### Speech (optional TTS)
+
+With an [ElevenLabs](https://elevenlabs.io) API key the appliance reads
+replies through the speaker while the display stays in sync — each word
+appears exactly when it is heard (the API's character timestamps drive the
+RSVP pacing). Add to `config.json`:
+
+```json
+"speech": {
+  "enabled": true,
+  "apiKey": "...",
+  "voiceId": "JBFqnCBsd6RMkjVDRZzb",
+  "volume": 1.0
+}
+```
+
+| Key | Default | Notes |
+|---|---|---|
+| `enabled` | `false` | hot-reloads — flip to mute without restarting |
+| `apiKey` / `voiceId` | — | required; read at launch (restart to change). Browse the [voice library](https://elevenlabs.io/app/voice-library); prefer voices tagged multilingual |
+| `modelId` | `eleven_flash_v2_5` | 32 languages, auto-detected per sentence |
+| `languageCode` | unset | optional ISO 639-1 pin when replies are mostly one language |
+| `speed` | `1.0` | voice speed multiplier |
+| `volume` | `1.0` | hot-reloads |
+
+Speech never blocks the face: any failure (missing key, network, rate limit)
+falls back to the normal reading-pace display for that sentence, and three
+consecutive failures mute speech until the next reconnect.
 
 ### Device pairing (one-time)
 
