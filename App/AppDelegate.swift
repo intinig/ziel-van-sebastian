@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var demoTimer: Timer?
     private var configWatcher: DispatchSourceFileSystemObject?
     private var gateway: GatewayClient?
+    private var speech: SpeechCoordinator?
 
     init(options: RunOptions) {
         self.options = options
@@ -35,6 +36,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let epoch = CACurrentMediaTime()
         let clock: () -> TimeInterval = { CACurrentMediaTime() - epoch }
 
+        let voiceId = config.speech.voiceId
+        let urlSafeVoiceId = !voiceId.isEmpty
+            && voiceId.unicodeScalars.allSatisfy { CharacterSet.urlPathAllowed.contains($0) }
+            && !voiceId.contains("/")
+        if !config.speech.apiKey.isEmpty && urlSafeVoiceId {
+            speech = SpeechCoordinator(director: director,
+                                       synth: ElevenLabsTTS(config: config.speech),
+                                       volume: config.speech.volume,
+                                       now: clock)
+        } else if config.speech.enabled {
+            NSLog("speech.enabled is true but apiKey/voiceId missing or voiceId malformed — speech disabled (restart after fixing config)")
+        }
+
         if options.demo {
             director.handle(.connectionUp, now: clock())
             startDemo(director: director, clock: clock)
@@ -56,8 +70,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 url: url,
                 token: config.gateway.token,
                 identity: identity,
-                onEvent: { [weak director] event in
+                onEvent: { [weak director, weak self] event in
                     DispatchQueue.main.async {
+                        if case .connectionDown = event { self?.speech?.cancelAll() }
                         director?.handle(event, now: clock())
                     }
                 }
@@ -76,11 +91,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             pixelFormat: mtkView.colorPixelFormat,
             look: look,
             clock: clock,
-            sceneProvider: { [weak director] now in
-                director?.tick(now: now)
+            sceneProvider: { [weak director, weak self] now in
+                let scene = director?.tick(now: now)
                     ?? SceneState(phase: .offline(auth: false), phaseProgress: 1, timeInPhase: 0,
                                   word: nil, wordAge: 0, hint: nil, dozing: false,
                                   tint: ColorRGB(r: 0.1, g: 0.3, b: 0.1))
+                self?.speech?.pump()
+                return scene
             }
         )
         self.renderer = renderer
@@ -173,6 +190,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.config = fresh
                 renderer.crt.shaderConfig = freshLook.shader
                 director.updatePacing(fresh.pacing)
+                director.setSpeechEnabled(fresh.speech.enabled)
+                self?.speech?.volume = fresh.speech.volume
             }
             // Editors often replace the file: re-arm the watcher.
             source.cancel()
