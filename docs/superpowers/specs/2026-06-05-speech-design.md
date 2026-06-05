@@ -56,6 +56,17 @@ textDelta ─► Director.route ──(speech off)──► WordPacer (today's p
 - **Protocol seam** (`SpeechSynthesizing`) so coordinator logic tests against a fake — same pattern as the gateway/mock split.
 - AVFoundation stays out of `Sources/Core` (which remains platform-free).
 
+## Language & Voice
+
+Replies can arrive in any language. The multilingual models auto-detect language from the text; `eleven_flash_v2_5` (our default) supports 32 languages and keeps the configured voice's character consistent across them — one voice reads everything.
+
+Two design consequences:
+
+- **Per-sentence requests weaken auto-detection** (a short sentence is little signal). The `previous_text` + `previous_request_ids` stitching already in the data flow also gives the model surrounding context, which mitigates this.
+- **Optional language pin:** the API's `language_code` (ISO 639-1) enforces a language; flash v2.5 supports enforcement. Exposed as optional `languageCode` config for appliances that mostly speak one language. Unset (default) = auto-detect. Unsupported model/code combinations are an API error → caught at startup validation, logged, treated as unset.
+
+Voice choice is taste: browse the [voice library](https://elevenlabs.io/app/voice-library), prefer voices tagged multilingual, put the ID in config. No hardcoded default; `config.example.json` documents the quickstart "George" (`JBFqnCBsd6RMkjVDRZzb`) as a known-working starter.
+
 ## Config
 
 New optional `speech` section in `config.json` (gitignored, alongside the gateway token); `config.example.json` gains placeholders:
@@ -64,8 +75,9 @@ New optional `speech` section in `config.json` (gitignored, alongside the gatewa
 |---|---|---|
 | `enabled` | `false` | Existing config watcher makes toggling live, no restart |
 | `apiKey` | — | ElevenLabs API key; required when enabled |
-| `voiceId` | — | Required when enabled |
-| `modelId` | `eleven_flash_v2_5` | ~75 ms latency, half-price per character |
+| `voiceId` | — | Required when enabled; see Language & Voice |
+| `modelId` | `eleven_flash_v2_5` | ~75 ms latency, half-price per character, 32 languages |
+| `languageCode` | unset | Optional ISO 639-1 pin; unset = auto-detect per sentence |
 | `speed` | `1.0` | Voice speed multiplier |
 | `volume` | `1.0` | AVAudioEngine mixer volume, 0–1 |
 
