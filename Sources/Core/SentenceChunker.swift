@@ -6,6 +6,7 @@ public struct SentenceChunker {
     private var buffer = ""
 
     private static let terminators: Set<Character> = [".", "!", "?", "…"]
+    // closing quotes/brackets after a terminator — not apostrophes inside words
     private static let closers: Set<Character> = ["\"", "'", ")", "]", "\u{201D}", "\u{2019}"]
     // Lowercased, dots removed ("e.g." → "eg"). Single letters handled separately.
     private static let abbreviations: Set<String> = [
@@ -67,7 +68,15 @@ public struct SentenceChunker {
             if c.isLetter || c == "." { s = p } else { break }
         }
         let token = buffer[s..<i].lowercased().replacingOccurrences(of: ".", with: "")
-        if token.count == 1 { return true }   // initials: "J."
+        if token.count == 1 {
+            // Contraction guard: "can't." walks back to just "t" — the
+            // apostrophe before it means this is not an initial like "J."
+            if s > buffer.startIndex {
+                let preceding = buffer[buffer.index(before: s)]
+                if preceding == "'" || preceding == "\u{2019}" { return false }
+            }
+            return true   // initials: "J."
+        }
         return Self.abbreviations.contains(token)
     }
 }

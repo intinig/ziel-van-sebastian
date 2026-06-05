@@ -58,4 +58,16 @@ final class SentenceChunkerTests: XCTestCase {
         _ = c.feed("Done. ")
         XCTAssertNil(c.flush())
     }
+
+    func testContractionEndingSentenceIsABoundary() {
+        var c = SentenceChunker()
+        XCTAssertEqual(c.feed("No, I can't. Here's the plan. "),
+                       ["No, I can't.", "Here's the plan."])
+    }
+
+    func testNonDotTerminatorAtBufferEndWaitsForMoreText() {
+        var c = SentenceChunker()
+        XCTAssertEqual(c.feed("Wait!"), [])
+        XCTAssertEqual(c.feed(" Done. "), ["Wait!", "Done."])
+    }
 }
