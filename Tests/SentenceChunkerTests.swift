@@ -26,12 +26,20 @@ final class SentenceChunkerTests: XCTestCase {
     func testDoesNotSplitAbbreviationsOrInitials() {
         var c = SentenceChunker()
         XCTAssertEqual(c.feed("Dr. Smith met J. Doe e.g. yesterday. Done "),
-                       ["Dr. Smith met J. Doe e.g. yesterday.", "Done"])
+                       ["Dr. Smith met J. Doe e.g. yesterday."])
+        XCTAssertEqual(c.flush(), "Done")
     }
 
     func testDoesNotSplitDecimals() {
         var c = SentenceChunker()
-        XCTAssertEqual(c.feed("Pi is 3.14 roughly. Yes "), ["Pi is 3.14 roughly.", "Yes"])
+        XCTAssertEqual(c.feed("Pi is 3.14 roughly. Yes "), ["Pi is 3.14 roughly."])
+        XCTAssertEqual(c.flush(), "Yes")
+    }
+
+    func testMidSentenceDeltaEndingInWhitespaceStaysBuffered() {
+        var c = SentenceChunker()
+        XCTAssertEqual(c.feed("The "), [])
+        XCTAssertEqual(c.feed("quick fox. "), ["The quick fox."])
     }
 
     func testNewlineIsABoundary() {

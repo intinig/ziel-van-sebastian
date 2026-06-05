@@ -15,6 +15,8 @@ public struct SentenceChunker {
     public init() {}
 
     /// Feed a delta; returns any complete sentences (trimmed, non-empty).
+    /// A fragment without a terminator stays buffered until more text arrives
+    /// or `flush()` is called — streamed deltas routinely end mid-sentence.
     public mutating func feed(_ text: String) -> [String] {
         buffer += text
         var out: [String] = []
@@ -22,12 +24,6 @@ public struct SentenceChunker {
             let sentence = String(buffer[..<cut]).trimmingCharacters(in: .whitespacesAndNewlines)
             buffer.removeSubrange(..<cut)
             if !sentence.isEmpty { out.append(sentence) }
-        }
-        // Extract trailing words surrounded by whitespace (leading and trailing).
-        let trimmed = buffer.trimmingCharacters(in: .whitespaces)
-        if !trimmed.isEmpty && buffer != trimmed && buffer.last?.isWhitespace == true {
-            out.append(trimmed)
-            buffer = ""
         }
         return out
     }
