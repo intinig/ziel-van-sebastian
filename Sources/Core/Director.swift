@@ -28,17 +28,59 @@ public final class Director {
     private let thinkingTint: ColorRGB
     private let speakingTint: ColorRGB
 
+    // MARK: - Speech state
+
+    private struct QueuedSentence {
+        enum Status: Equatable { case requested, playing, failed }
+        let id: Int
+        let text: String
+        var status: Status = .requested
+        var words: [WordTiming] = []
+        var startedAt: TimeInterval = 0
+    }
+
+    private var speechEnabled: Bool
+    private var speechQueue: [QueuedSentence] = []
+    private var outbox: [SpeechRequest] = []
+    private var chunker = SentenceChunker()
+    private var nextSpeechID = 0
+    private var wordFromPacer = true
+
+    /// Sentences queued, in flight, or playing — display must not wind down.
+    private var speechBusy: Bool { !speechQueue.isEmpty || !outbox.isEmpty }
+
     public init(config: ZielConfig, look: ResolvedLook) {
         self.pacer = WordPacer(config: config.pacing)
         self.behavior = config.behavior
         self.idleTint = ColorRGB(hex: look.idleTint)
         self.thinkingTint = ColorRGB(hex: look.thinkingTint)
         self.speakingTint = ColorRGB(hex: look.speakingTint)
+        self.speechEnabled = config.speech.enabled
     }
 
     /// Live config reload (pacing only; tints/timings need restart in v1).
     public func updatePacing(_ p: PacingConfig) {
         pacer.config = p
+    }
+
+    /// Live config reload: toggles the speech routing fork for future text.
+    public func setSpeechEnabled(_ on: Bool) {
+        speechEnabled = on
+    }
+
+    /// Drains queued sentences for the speech coordinator (called on frame tick).
+    public func takeSpeechRequests() -> [SpeechRequest] {
+        let out = outbox
+        outbox.removeAll()
+        return out
+    }
+
+    /// TTS for `id` failed — its text will display via the pacer when it
+    /// reaches the queue head (full display behavior wired in advance()).
+    public func speechFailed(id: Int, now: TimeInterval) {
+        guard let i = speechQueue.firstIndex(where: { $0.id == id }) else { return }
+        speechQueue[i].status = .failed
+        lastActivity = now
     }
 
     /// Number of tracked runs — for tests and diagnostics only.
@@ -83,7 +125,11 @@ public final class Director {
             route(tail, from: run)
             runs[run]!.ended = true
             if focusedRun == run {
-                pacer.endOfText()
+                if speechEnabled {
+                    if let tail = chunker.flush() { enqueueSpeech(tail) }
+                } else {
+                    pacer.endOfText()
+                }
             } else if runs[run]!.pending.isEmpty {
                 // Tool-only or empty-text run: nothing left to say — evict now
                 // so days of background runs can't grow `runs` unboundedly.
@@ -123,6 +169,10 @@ public final class Director {
         pacer.reset()
         currentWord = nil
         hint = nil
+        speechQueue.removeAll()
+        outbox.removeAll()
+        chunker = SentenceChunker()
+        wordFromPacer = true
     }
 
     private func go(_ p: Phase, now: TimeInterval) {
@@ -145,15 +195,30 @@ public final class Director {
         }
     }
 
+    private func enqueueSpeech(_ sentence: String) {
+        let text = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        let id = nextSpeechID
+        nextSpeechID += 1
+        speechQueue.append(QueuedSentence(id: id, text: text))
+        outbox.append(SpeechRequest(id: id, text: text))
+    }
+
     private func route(_ stripped: String, from run: String) {
         guard !stripped.isEmpty else { return }
         if focusedRun == nil {
             focusedRun = run
         }
         if focusedRun == run {
-            pacer.feed(stripped)
-            // Late delta after runEnded (out-of-order frames): re-seal the queue.
-            if runs[run]?.ended == true { pacer.endOfText() }
+            if speechEnabled {
+                for s in chunker.feed(stripped) { enqueueSpeech(s) }
+                // Late delta after runEnded (out-of-order frames): flush the tail.
+                if runs[run]?.ended == true, let tail = chunker.flush() { enqueueSpeech(tail) }
+            } else {
+                pacer.feed(stripped)
+                // Late delta after runEnded (out-of-order frames): re-seal the queue.
+                if runs[run]?.ended == true { pacer.endOfText() }
+            }
         } else {
             runs[run]!.pending += stripped
         }
@@ -173,7 +238,7 @@ public final class Director {
             }
             // The focused run may have died with nothing queued — release it so
             // pending runs can be adopted and the machine can wind down.
-            if let focused = focusedRun, runs[focused]?.ended ?? true, pacer.isEmpty {
+            if let focused = focusedRun, runs[focused]?.ended ?? true, pacer.isEmpty, !speechBusy {
                 runs.removeValue(forKey: focused)
                 focusedRun = nil
                 if adoptPendingRun(now: now), startNextWord(now: now) {
@@ -181,7 +246,7 @@ public final class Director {
                     return
                 }
             }
-            if !anyActiveRuns {
+            if !anyActiveRuns && !speechBusy {
                 go(.settling, now: now)
             }
         case .speaking:
@@ -213,35 +278,42 @@ public final class Director {
     private func finishSpeaking(now: TimeInterval) {
         currentWord = nil
         guard let focused = focusedRun else {
-            go(anyActiveRuns ? .thinking : .settling, now: now)
+            go((anyActiveRuns || speechBusy) ? .thinking : .settling, now: now)
             return
         }
         let focusedDone = runs[focused]?.ended ?? true
-        if focusedDone && pacer.isEmpty {
+        if focusedDone && pacer.isEmpty && !speechBusy {
             runs.removeValue(forKey: focused)
             focusedRun = nil
             if adoptPendingRun(now: now) {
                 go(.speaking, now: now)
                 _ = startNextWord(now: now)
-                if currentWord == nil { go(anyActiveRuns ? .thinking : .settling, now: now) }
+                if currentWord == nil { go((anyActiveRuns || speechBusy) ? .thinking : .settling, now: now) }
             } else {
-                go(anyActiveRuns ? .thinking : .settling, now: now)
+                go((anyActiveRuns || speechBusy) ? .thinking : .settling, now: now)
             }
         } else {
             go(.thinking, now: now)   // run still active, waiting for more text
         }
     }
 
-    /// Picks the most recently active run with pending text; feeds the pacer.
+    /// Picks the most recently active run with pending text; feeds the pacer
+    /// (or, with speech on, the sentence chunker).
     private func adoptPendingRun(now: TimeInterval) -> Bool {
         let candidate = runs
             .filter { !$0.value.pending.isEmpty }
             .max { $0.value.lastActivity < $1.value.lastActivity }
         guard let (run, state) = candidate else { return false }
         focusedRun = run
-        pacer.feed(state.pending)
+        if speechEnabled {
+            chunker = SentenceChunker()
+            for s in chunker.feed(state.pending) { enqueueSpeech(s) }
+            if state.ended, let tail = chunker.flush() { enqueueSpeech(tail) }
+        } else {
+            pacer.feed(state.pending)
+            if state.ended { pacer.endOfText() }
+        }
         runs[run]!.pending = ""
-        if state.ended { pacer.endOfText() }
         return true
     }
 
