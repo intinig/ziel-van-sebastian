@@ -37,6 +37,7 @@ targets:
       - Sources/Core
       - Sources/Gateway
       - Sources/MockGatewayKit
+      - Sources/Speech
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
