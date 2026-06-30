@@ -198,4 +198,30 @@ final class DirectorSpeechTests: XCTestCase {
         d.speechFinished(id: req.id, now: 3)
         XCTAssertEqual(d.tick(now: 3.1).phase, .settling)   // recovered
     }
+
+    func testDropPendingSpeechSkipsBacklogButResumesLive() {
+        let d = makeSpeechDirector()
+        d.handle(.connectionUp, now: 0)
+        // Backlog queued while Ziel sat on a hidden Space (the render loop, and
+        // thus the speech pump, was paused — but gateway text kept arriving):
+        d.handle(.textDelta(run: "r1", session: "main", text: "One. Two. Three. "), now: 1)
+
+        d.dropPendingSpeech(now: 5)
+        XCTAssertEqual(d.takeSpeechRequests(), [], "missed backlog is skipped, not replayed")
+
+        // Text arriving after returning is spoken live:
+        d.handle(.textDelta(run: "r1", session: "main", text: "Four. "), now: 6)
+        XCTAssertEqual(d.takeSpeechRequests().map(\.text), ["Four."], "live text after return is spoken")
+    }
+
+    func testDropPendingSpeechDoesNotStrandTheFace() {
+        let d = makeSpeechDirector()
+        d.handle(.connectionUp, now: 0)
+        d.handle(.textDelta(run: "r1", session: "main", text: "One. Two. "), now: 1)
+        d.handle(.runEnded(run: "r1", session: "main"), now: 1.1)
+        _ = d.takeSpeechRequests()
+        // Swiped away, then back after the run already ended: nothing left to say.
+        d.dropPendingSpeech(now: 5)
+        XCTAssertEqual(d.tick(now: 5.1).phase, .settling)   // winds down, not stuck "busy"
+    }
 }
