@@ -112,11 +112,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.center()
         } else {
             window = NSWindow(contentRect: NSScreen.main?.frame ?? .zero,
-                              styleMask: [.borderless],
+                              styleMask: [.titled, .closable, .miniaturizable, .resizable],
                               backing: .buffered, defer: false)
-            window.level = .mainMenu + 1
-            window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
-            NSApp.presentationOptions = [.hideDock, .hideMenuBar]
+            // Hidden chrome so nothing shows if the window is ever seen pre-fullscreen;
+            // .fullScreenPrimary lets it own a Space you can three-finger-swipe to.
+            window.titleVisibility = .hidden
+            window.titlebarAppearsTransparent = true
+            window.styleMask.insert(.fullSizeContentView)
+            window.collectionBehavior = [.fullScreenPrimary]
             self.displayManager = DisplayManager(window: window, config: config.display)
         }
         window.contentView = mtkView
@@ -126,6 +129,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Place/front only after contentView is set, so the appliance never
         // shows an empty window. No-op on the --window path (displayManager nil).
         displayManager?.activate()
+        if !options.window {
+            // Native fullscreen → a dedicated Space macOS switches to; swipe away
+            // for a work desktop and back. Placed on the target screen first.
+            window.toggleFullScreen(nil)
+        }
 
         watchConfig(at: configURL, renderer: renderer, director: director)
     }
