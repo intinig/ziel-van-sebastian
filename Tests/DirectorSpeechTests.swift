@@ -224,4 +224,28 @@ final class DirectorSpeechTests: XCTestCase {
         d.dropPendingSpeech(now: 5)
         XCTAssertEqual(d.tick(now: 5.1).phase, .settling)   // winds down, not stuck "busy"
     }
+
+    func testDropPendingSpeechClearsBackgroundRunPending() {
+        let d = makeSpeechDirector()
+        d.handle(.connectionUp, now: 0)
+        // r1 is focused; r2 (non-focused) buffers its text in `runs[r2].pending`
+        // while Ziel sits on a hidden Space.
+        d.handle(.textDelta(run: "r1", session: "main", text: "First. "), now: 1)
+        d.handle(.textDelta(run: "r2", session: "main", text: "Background reply. "), now: 1.1)
+        _ = d.takeSpeechRequests()   // drain r1's queued sentence
+
+        // Swipe back: the drop must also discard the hidden-Space text buffered on
+        // the non-focused run, or run adoption replays it later (the catch-up bug).
+        d.dropPendingSpeech(now: 2)
+
+        d.handle(.runEnded(run: "r1", session: "main"), now: 2.1)
+        d.handle(.runEnded(run: "r2", session: "main"), now: 2.2)
+        var spoken = Set<String>()
+        for t in stride(from: 2.2, through: 12.0, by: 0.1) {
+            _ = d.tick(now: t)
+            spoken.formUnion(d.takeSpeechRequests().map(\.text))
+        }
+        XCTAssertFalse(spoken.contains("Background reply."),
+                       "text that arrived on a hidden Space must not be replayed via run adoption")
+    }
 }

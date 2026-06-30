@@ -113,6 +113,14 @@ public final class Director {
         pacer.reset()
         currentWord = nil
         wordFromPacer = true
+        // Non-focused runs buffer their text in `pending` (not the speech queues),
+        // and each run's stripper holds partial in-flight markdown. Clear both for
+        // every run so text that arrived while hidden can't be replayed later via
+        // adoptPendingRun — otherwise multi-run sessions still catch up on return.
+        for run in runs.keys {
+            runs[run]?.pending = ""
+            runs[run]?.stripper = MarkdownStreamStripper()
+        }
         lastActivity = now
     }
 
