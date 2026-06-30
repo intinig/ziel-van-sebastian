@@ -12,6 +12,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var configWatcher: DispatchSourceFileSystemObject?
     private var gateway: GatewayClient?
     private var speech: SpeechCoordinator?
+    private var occlusionObserver: NSObjectProtocol?
+    private var spaceVisible = true
 
     init(options: RunOptions) {
         self.options = options
@@ -135,6 +137,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.toggleFullScreen(nil)
         }
 
+        if !options.window {
+            // Speak only while Ziel's Space is the one on screen. While it's on a
+            // background Space the render loop (and the speech pump) is paused, but
+            // gateway text keeps arriving — so on swipe-away we go quiet and clear
+            // queued audio, and on swipe-back we drop whatever accrued while hidden
+            // and resume live. occlusionState loses .visible exactly when you swipe
+            // to another Space (this window is alone on its own fullscreen Space).
+            occlusionObserver = NotificationCenter.default.addObserver(
+                forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main
+            ) { [weak self, clock] _ in
+                guard let self, let window = self.window else { return }
+                let visible = window.occlusionState.contains(.visible)
+                guard visible != self.spaceVisible else { return }
+                self.spaceVisible = visible
+                if visible {
+                    self.director?.dropPendingSpeech(now: clock())   // skip the backlog, resume live
+                } else {
+                    self.speech?.cancelAll()                          // go quiet now, clear queues
+                }
+            }
+        }
+
         watchConfig(at: configURL, renderer: renderer, director: director)
     }
 
@@ -142,6 +166,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         gateway?.stop()
+        if let occlusionObserver { NotificationCenter.default.removeObserver(occlusionObserver) }
     }
 
     private func applyDebugState(director: Director, clock: () -> TimeInterval) {
