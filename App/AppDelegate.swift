@@ -98,7 +98,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     ?? SceneState(phase: .offline(auth: false), phaseProgress: 1, timeInPhase: 0,
                                   word: nil, wordAge: 0, hint: nil, dozing: false,
                                   tint: ColorRGB(r: 0.1, g: 0.3, b: 0.1))
-                self?.speech?.pump()
+                // MTKView keeps rendering while Ziel is on a background Space, so
+                // gate the pump on visibility — otherwise text that arrives while
+                // hidden gets spoken. spaceVisible is false between swipe-away and
+                // swipe-back; it stays true on the --window path (no observer).
+                if self?.spaceVisible ?? true { self?.speech?.pump() }
                 return scene
             }
         )
@@ -138,12 +142,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if !options.window {
-            // Speak only while Ziel's Space is the one on screen. While it's on a
-            // background Space the render loop (and the speech pump) is paused, but
-            // gateway text keeps arriving — so on swipe-away we go quiet and clear
-            // queued audio, and on swipe-back we drop whatever accrued while hidden
-            // and resume live. occlusionState loses .visible exactly when you swipe
-            // to another Space (this window is alone on its own fullscreen Space).
+            // Speak only while Ziel's Space is the one on screen. MTKView keeps
+            // rendering on a background Space, so the sceneProvider gates pump() on
+            // spaceVisible (above); here we handle the edges — on swipe-away go
+            // quiet and clear queued audio, on swipe-back drop whatever text accrued
+            // while hidden and resume live. occlusionState loses .visible exactly
+            // when you swipe to another Space (this window is alone on its own Space).
             occlusionObserver = NotificationCenter.default.addObserver(
                 forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main
             ) { [weak self, clock] _ in
