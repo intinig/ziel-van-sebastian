@@ -81,6 +81,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             self.gateway = gateway
             gateway.start()
+
+            // TEMPORARY (Task 4 dev trigger, removed in Phase 3 when the real
+            // voice coordinator lands): set ZIEL_VOICE_DEV_PROMPT to a non-empty
+            // string to inject it as a one-shot prompt a few seconds after
+            // connecting, so the input→OpenClaw→output loop can be exercised on
+            // the appliance without a microphone.
+            if let devPrompt = ProcessInfo.processInfo.environment["ZIEL_VOICE_DEV_PROMPT"],
+               !devPrompt.isEmpty {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak gateway] in
+                    NSLog("ZIEL_VOICE_DEV_PROMPT: sending dev prompt %@", devPrompt)
+                    gateway?.sendPrompt(devPrompt)
+                }
+            }
         }
 
         let device = MTLCreateSystemDefaultDevice()!

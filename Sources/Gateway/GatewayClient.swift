@@ -60,6 +60,24 @@ public final class GatewayClient: NSObject, URLSessionWebSocketDelegate {
         }
     }
 
+    /// Injects a user prompt into the main OpenClaw session (`chat.send`).
+    /// The agent's reply streams back via the already-consumed `agent` events —
+    /// no output-side handling needed here. No-op if not currently connected.
+    public func sendPrompt(_ text: String) {
+        queue.async { [weak self] in
+            guard let self, let task = self.task else { return }
+            let frame = OpenClawTranslator.promptFrame(
+                text: text, id: "prompt-\(UUID().uuidString)",
+                mainSessionKey: self.translationContext.mainSessionKey)
+            guard let data = try? JSONSerialization.data(withJSONObject: frame) else { return }
+            task.send(.string(String(decoding: data, as: UTF8.self))) { [weak self] error in
+                if let error {
+                    self?.log.error("sendPrompt failed: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
     // MARK: - Connection lifecycle (all on `queue`)
 
     private func open() {
