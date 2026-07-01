@@ -37,6 +37,8 @@ public final class Director {
         var status: Status = .requested
         var words: [WordTiming] = []
         var startedAt: TimeInterval = 0
+        var envelope: [Float] = []
+        var envelopeRate: Double = 60
     }
 
     private var speechEnabled: Bool
@@ -45,6 +47,9 @@ public final class Director {
     private var chunker = SentenceChunker()
     private var nextSpeechID = 0
     private var wordFromPacer = true
+
+    private var smoothedLevel: Double = 0
+    private var lastLevelTick: TimeInterval = 0
 
     /// Sentences queued, in flight, or playing — display must not wind down.
     private var speechBusy: Bool { !speechQueue.isEmpty || !outbox.isEmpty }
@@ -84,12 +89,16 @@ public final class Director {
     }
 
     /// Audio playback for sentence `id` began at `now`; `words` are timed
-    /// relative to that instant.
-    public func speechStarted(id: Int, words: [WordTiming], now: TimeInterval) {
+    /// relative to that instant and `envelope` gives its amplitude over time.
+    public func speechStarted(id: Int, words: [WordTiming],
+                              envelope: [Float] = [], envelopeRate: Double = 60,
+                              now: TimeInterval) {
         guard let i = speechQueue.firstIndex(where: { $0.id == id }) else { return }
         speechQueue[i].status = .playing
         speechQueue[i].words = words
         speechQueue[i].startedAt = now
+        speechQueue[i].envelope = envelope
+        speechQueue[i].envelopeRate = envelopeRate
         lastActivity = now
     }
 
@@ -185,6 +194,11 @@ public final class Director {
         advance(now: now)
         let elapsed = now - phaseStart
         let progress = transitionProgress(elapsed: elapsed)
+        let raw = speakingLevel(now: now)
+        let dt = max(0, now - lastLevelTick)
+        lastLevelTick = now
+        let tau = raw > smoothedLevel ? 0.03 : 0.12   // fast attack, gentle release
+        smoothedLevel += (raw - smoothedLevel) * (1 - exp(-dt / tau))
         return SceneState(
             phase: phase,
             phaseProgress: progress,
@@ -193,7 +207,8 @@ public final class Director {
             wordAge: phase == .speaking ? now - wordStart : 0,
             hint: hintVisible(now: now) ? hint : nil,
             dozing: phase == .idle && (now - lastActivity) > behavior.dozeAfterSeconds,
-            tint: tint(elapsed: elapsed, progress: progress)
+            tint: tint(elapsed: elapsed, progress: progress),
+            level: smoothedLevel
         )
     }
 
@@ -325,6 +340,21 @@ public final class Director {
             return true
         }
         return false
+    }
+
+    /// Continuous voice amplitude of the currently-playing sentence, sampled by
+    /// the audio clock and linearly interpolated. 0 when nothing is playing —
+    /// the halo/ripple then eases out via the release smoothing in tick().
+    /// Independent of word cadence by construction.
+    private func speakingLevel(now: TimeInterval) -> Double {
+        guard let head = speechQueue.first, head.status == .playing,
+              !head.envelope.isEmpty else { return 0 }
+        let t = (now - head.startedAt) * head.envelopeRate
+        if t <= 0 { return Double(head.envelope[0]) }
+        let i = Int(t)
+        if i >= head.envelope.count - 1 { return Double(head.envelope[head.envelope.count - 1]) }
+        let frac = t - Double(i)
+        return Double(head.envelope[i]) * (1 - frac) + Double(head.envelope[i + 1]) * frac
     }
 
     /// Deliberately follows only the queue HEAD — relies on the coordinator
