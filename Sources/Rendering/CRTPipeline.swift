@@ -37,6 +37,9 @@ final class CRTPipeline {
     /// Live-reloaded by the config watcher.
     var shaderConfig: ShaderConfig
 
+    /// Live-reloaded by the config watcher (halo + ripple gating).
+    var waveform: WaveformConfig = WaveformConfig()
+
     private let device: MTLDevice
     private let persistPipeline: MTLRenderPipelineState
     private let brightPipeline: MTLRenderPipelineState

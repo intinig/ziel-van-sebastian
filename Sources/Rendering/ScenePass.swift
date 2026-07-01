@@ -132,6 +132,41 @@ final class ScenePass {
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: verts.count / 2)
     }
 
+    /// Concentric phosphor rings centered in the view; radius/brightness driven
+    /// by `level` (0…1). Drawn in the scene pass so CRT bloom picks it up.
+    func drawHalo(encoder: MTLRenderCommandEncoder, viewW: Double, viewH: Double,
+                  level: Double, tint: ColorRGB) {
+        guard level > 0.001, viewW > 0, viewH > 0 else { return }
+        let cx = viewW / 2, cy = viewH / 2, minDim = min(viewW, viewH)
+        let segments = 96
+        encoder.setRenderPipelineState(flatPipeline)
+        for k in 0..<3 {
+            let radius = minDim * 0.20 + Double(k) * minDim * 0.055 + level * minDim * 0.16
+            let thickness = max(1.0, 2.4 - Double(k) * 0.5)
+            let alpha = min(1.0, (0.5 - Double(k) * 0.13) * (0.4 + 0.6 * level))
+            guard alpha > 0.001 else { continue }
+            func ndc(_ ang: Double, _ r: Double) -> (Float, Float) {
+                let px = cx + cos(ang) * r, py = cy + sin(ang) * r
+                return (Float(px / viewW * 2 - 1), Float(1 - py / viewH * 2))
+            }
+            var verts: [Float] = []
+            for i in 0..<segments {
+                let a0 = Double(i) / Double(segments) * 2 * .pi
+                let a1 = Double(i + 1) / Double(segments) * 2 * .pi
+                let (ix0, iy0) = ndc(a0, radius - thickness / 2)
+                let (ox0, oy0) = ndc(a0, radius + thickness / 2)
+                let (ix1, iy1) = ndc(a1, radius - thickness / 2)
+                let (ox1, oy1) = ndc(a1, radius + thickness / 2)
+                verts += [ix0, iy0, ox0, oy0, ix1, iy1,
+                          ox0, oy0, ox1, oy1, ix1, iy1]
+            }
+            var color: [Float] = [Float(tint.r), Float(tint.g), Float(tint.b), Float(alpha)]
+            encoder.setVertexBytes(verts, length: verts.count * MemoryLayout<Float>.size, index: 0)
+            encoder.setFragmentBytes(&color, length: 16, index: 0)
+            encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: verts.count / 2)
+        }
+    }
+
     /// Textured quad centered at NDC (cx, cy) with half-extents (hw, hh).
     func drawGlyphQuad(encoder: MTLRenderCommandEncoder, texture: MTLTexture,
                        center: (x: Float, y: Float), half: (w: Float, h: Float),

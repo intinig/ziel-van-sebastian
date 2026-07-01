@@ -107,6 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         )
         self.renderer = renderer
+        renderer.crt.waveform = config.waveform
         mtkView.delegate = renderer
 
         let window: NSWindow
@@ -230,6 +231,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                let freshLook = try? ResolvedLook.resolve(fresh.look, themeOverride: self?.options.theme) {
                 self?.config = fresh
                 renderer.crt.shaderConfig = freshLook.shader
+                renderer.crt.waveform = fresh.waveform
                 director.updatePacing(fresh.pacing)
                 director.setSpeechEnabled(fresh.speech.enabled)
                 self?.speech?.volume = fresh.speech.volume
