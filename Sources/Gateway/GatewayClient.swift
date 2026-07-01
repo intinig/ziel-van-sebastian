@@ -117,7 +117,7 @@ public final class GatewayClient: NSObject, URLSessionWebSocketDelegate {
         // for OpenClaw-internal control-plane RPCs). Scopes only survive for
         // paired devices, hence the signed device block below.
         let clientId = "gateway-client", mode = "ui", role = "operator"
-        let scopes = ["operator.read"]
+        let scopes = ["operator.read", "operator.write"]  // write enables chat.send (voice prompt injection)
         var params: [String: Any] = [
             "minProtocol": 3, "maxProtocol": 4,
             "client": ["id": clientId, "version": "1.0.0",
