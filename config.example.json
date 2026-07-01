@@ -37,5 +37,18 @@
   "waveform": {
     "enabled": true,
     "ripple": { "enabled": true, "strength": 0.10, "speed": 2.0 }
+  },
+  "voice": {
+    "enabled": false,
+    "wakeWord": "Sebastian",
+    "gatewayURL": "ws://127.0.0.1:18790",
+    "model": "base.en",
+    "modelPath": "",
+    "wakeModelPath": "",
+    "wakeThreshold": 0.5,
+    "inputDevice": "",
+    "outputDevice": "",
+    "followUpWindowSeconds": 8,
+    "bargeIn": true
   }
 }

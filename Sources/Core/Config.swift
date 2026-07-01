@@ -185,6 +185,36 @@ public struct WaveformConfig: Codable, Equatable {
     }
 }
 
+public struct VoiceConfig: Codable, Equatable {
+    public var enabled: Bool = false
+    public var wakeWord: String = "Sebastian"
+    public var gatewayURL: String = "ws://127.0.0.1:18790"
+    public var model: String = "base.en"
+    public var modelPath: String = ""
+    public var wakeModelPath: String = ""
+    public var wakeThreshold: Double = 0.5
+    public var inputDevice: String = ""
+    public var outputDevice: String = ""
+    public var followUpWindowSeconds: Double = 8
+    public var bargeIn: Bool = true
+
+    public init() {}
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? enabled
+        wakeWord = try c.decodeIfPresent(String.self, forKey: .wakeWord) ?? wakeWord
+        gatewayURL = try c.decodeIfPresent(String.self, forKey: .gatewayURL) ?? gatewayURL
+        model = try c.decodeIfPresent(String.self, forKey: .model) ?? model
+        modelPath = try c.decodeIfPresent(String.self, forKey: .modelPath) ?? modelPath
+        wakeModelPath = try c.decodeIfPresent(String.self, forKey: .wakeModelPath) ?? wakeModelPath
+        wakeThreshold = try c.decodeIfPresent(Double.self, forKey: .wakeThreshold) ?? wakeThreshold
+        inputDevice = try c.decodeIfPresent(String.self, forKey: .inputDevice) ?? inputDevice
+        outputDevice = try c.decodeIfPresent(String.self, forKey: .outputDevice) ?? outputDevice
+        followUpWindowSeconds = try c.decodeIfPresent(Double.self, forKey: .followUpWindowSeconds) ?? followUpWindowSeconds
+        bargeIn = try c.decodeIfPresent(Bool.self, forKey: .bargeIn) ?? bargeIn
+    }
+}
+
 public struct ZielConfig: Codable, Equatable {
     public var gateway: GatewayConfig = GatewayConfig()
     public var pacing: PacingConfig = PacingConfig()
@@ -193,6 +223,7 @@ public struct ZielConfig: Codable, Equatable {
     public var display: DisplayConfig = DisplayConfig()
     public var speech: SpeechConfig = SpeechConfig()
     public var waveform: WaveformConfig = WaveformConfig()
+    public var voice: VoiceConfig = VoiceConfig()
 
     public init() {}
     public init(from decoder: Decoder) throws {
@@ -204,6 +235,7 @@ public struct ZielConfig: Codable, Equatable {
         display = try c.decodeIfPresent(DisplayConfig.self, forKey: .display) ?? display
         speech = try c.decodeIfPresent(SpeechConfig.self, forKey: .speech) ?? speech
         waveform = try c.decodeIfPresent(WaveformConfig.self, forKey: .waveform) ?? waveform
+        voice = try c.decodeIfPresent(VoiceConfig.self, forKey: .voice) ?? voice
     }
 
     public static func decode(_ data: Data) throws -> ZielConfig {
