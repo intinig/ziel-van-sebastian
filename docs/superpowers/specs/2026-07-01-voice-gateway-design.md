@@ -15,7 +15,7 @@ Today Ziel is display-only: OpenClaw replies flow in and the face shows/speaks t
 
 ## Scope
 
-**In v1:** wake word "Sebastian", local whisper STT, inject to OpenClaw main session, reply via existing path, follow-up window, **barge-in**, audio-device selection for echo cancellation, graceful degradation.
+**In v1:** wake word "Sebastian" (openWakeWord), local whisper STT, inject to OpenClaw main session, reply via existing path, follow-up window, **barge-in**, audio-device selection for echo cancellation, graceful degradation.
 
 **Not in v1:** software acoustic echo cancellation (we rely on hardware/physics — see Audio & Echo), cancelling OpenClaw's in-flight generation on barge-in, non-English models, streaming partial transcripts, speaker identification.
 
@@ -68,7 +68,7 @@ mic ─► [ Voice Gateway process ]                         [ App (coordinator 
         AVAudioEngine input                               VoiceGatewayClient (new)
         ─► VAD segmentation                    events     ─► ConversationController (Core)
         ─► whisper.cpp STT           ───────────────────► ─► on "heard": GatewayClient.sendPrompt(text)  ──► OpenClaw main session
-        ─► wake-word spotting ("Sebastian" prefix)         ◄─ commands (arm / listen / follow-up)
+        ─► openWakeWord detector ("Sebastian", always-on in IDLE)         ◄─ commands (arm / listen / follow-up)
                                      ◄───────────────────  ─► tracks Director speaking → drives states + barge-in stop
                                         local WebSocket
                                         ws://127.0.0.1:18790
@@ -88,7 +88,11 @@ Mirrors `MockGatewayKit` + `MockGateway`: a library (in-process testable) wrappe
 - **Mic capture** via `AVAudioEngine` input node, resampled to 16 kHz mono PCM (whisper's input format).
 - **VAD segmentation**: a lightweight voice-activity detector (WebRTC VAD; Silero-ONNX noted as a more robust alternative) gates capture into utterances — start on speech, end on trailing silence. Prevents running whisper on room noise.
 - **STT**: whisper.cpp transcribes each finalized utterance. Model configurable (`base.en` default; `small.en` for more accuracy). Model file resolved from `voice.modelPath` (bundled or downloaded once).
-- **Wake-word spotting**: reuse whisper — in IDLE, only utterances whose transcript begins with the wake word ("sebastian", case/punctuation-insensitive) count; the wake word is stripped and the remainder is the command (single-utterance "Sebastian, what's the weather" works). In conversation-active states, every utterance is a command (no wake word). This avoids a second ML dependency; a dedicated wake-word engine (openWakeWord custom model) is a noted optimization if idle CPU is too high.
+- **Wake-word spotting** (behind a `WakeDetector` interface):
+  - **Production = openWakeWord.** A small always-on detector listens continuously (cheap) for "Sebastian" in IDLE only; on fire, the utterance is captured (VAD) and whisper transcribes the command. In conversation-active states the wake detector is bypassed — VAD gates whisper directly (no wake word). Runtime is openWakeWord's 3-stage ONNX chain (melspectrogram → speech-embedding → custom "sebastian" head) executed via **ONNX Runtime** linked into the gateway. Fully offline, permissively licensed (Apache-2.0), and the custom model **never expires** — the reason we chose it over Porcupine, whose free-tier custom keywords expire every 30 days (verified 2026-07-01).
+  - The custom `sebastian.onnx` head is trained once via openWakeWord's synthetic-data pipeline (a setup step, not runtime).
+  - **Fallback / test double = whisper-prefix**: transcribe a VAD segment and match a leading "Sebastian". Keeps unit tests and early dev running with no ONNX model; also a zero-dependency escape hatch if ONNX Runtime integration slips.
+  - Single-utterance "Sebastian, what's the weather" works either way: after wake, the captured utterance is transcribed and the leading wake word (if present) stripped.
 - **Protocol** over the local WS:
   - Gateway → App events: `wake`, `listening`, `heard {text}`, `vad {speaking:bool}`, `error {message}`.
   - App → Gateway commands: `mode {armed | listen | followup | speaking}` (controls whether the wake word is required and whether the mic is armed for barge-in), plus `stop`.
@@ -129,6 +133,8 @@ Barge-in needs the mic live while Sebastian speaks *without* the mic triggering 
   "gatewayURL": "ws://127.0.0.1:18790",
   "model": "base.en",
   "modelPath": "",
+  "wakeModelPath": "",
+  "wakeThreshold": 0.5,
   "inputDevice": "",
   "outputDevice": "",
   "followUpWindowSeconds": 8,
@@ -168,7 +174,8 @@ Microphone required. Confirmed empirically: the appliance is `Mac16,10` (M4 Mac 
 2. `ConversationController` state machine in Core (TDD).
 3. `VoiceGatewayKit` protocol + service skeleton with a mock STT + CLI.
 4. whisper.cpp integration (STT on a fixture).
-5. Mic capture + VAD + wake-word ("Sebastian" prefix).
+5. Mic capture + VAD; `WakeDetector` interface with the whisper-prefix fallback (unblocks the flow with no ONNX model).
+5b. Train the custom "Sebastian" openWakeWord model (one-time setup); integrate ONNX Runtime + the openWakeWord detector as the production `WakeDetector`.
 6. App `VoiceGatewayClient` + coordinator wiring + `GatewayClient.sendPrompt`.
 7. Follow-up window.
 8. Barge-in (drop pending + stop), tested with AirPods.
@@ -180,4 +187,4 @@ Microphone required. Confirmed empirically: the appliance is `Mac16,10` (M4 Mac 
 - **Software AEC** — rely on hardware (PowerConf) / physics (AirPods). Open-air barge-in without a hardware-AEC device would need it.
 - **Cancelling OpenClaw's in-flight generation** on barge-in — v1 stops locally + drops pending; upstream cancel is an enhancement pending protocol support.
 - Streaming partial transcripts; non-English models; multi-speaker / speaker ID.
-- A dedicated wake-word engine (openWakeWord custom "Sebastian" model) — only if VAD+whisper idle CPU proves too high.
+- **Porcupine** as the wake engine — considered and rejected: free-tier custom keywords expire every 30 days (verified 2026-07-01), an unacceptable recurring chore for a set-and-forget appliance. openWakeWord (no expiry, Apache-2.0) is used instead.
