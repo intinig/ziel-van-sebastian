@@ -156,6 +156,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard visible != self.spaceVisible else { return }
                 self.spaceVisible = visible
                 if visible {
+                    // Re-arm the one-shot cursor hide: moving the mouse on the work
+                    // desktop consumed DisplayManager's, so the pointer would linger
+                    // over the face on return until the next place().
+                    NSCursor.setHiddenUntilMouseMoves(true)
                     self.director?.dropPendingSpeech(now: clock())   // skip the backlog, resume live
                 } else {
                     self.speech?.cancelAll()                          // go quiet now, clear queues
