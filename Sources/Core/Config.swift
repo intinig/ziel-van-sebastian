@@ -161,6 +161,30 @@ public struct SpeechConfig: Codable, Equatable {
     }
 }
 
+public struct RippleConfig: Codable, Equatable {
+    public var enabled: Bool = true
+    public var strength: Double = 0.10
+    public var speed: Double = 2.0
+    public init() {}
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? enabled
+        strength = try c.decodeIfPresent(Double.self, forKey: .strength) ?? strength
+        speed = try c.decodeIfPresent(Double.self, forKey: .speed) ?? speed
+    }
+}
+
+public struct WaveformConfig: Codable, Equatable {
+    public var enabled: Bool = true
+    public var ripple: RippleConfig = RippleConfig()
+    public init() {}
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? enabled
+        ripple = try c.decodeIfPresent(RippleConfig.self, forKey: .ripple) ?? ripple
+    }
+}
+
 public struct ZielConfig: Codable, Equatable {
     public var gateway: GatewayConfig = GatewayConfig()
     public var pacing: PacingConfig = PacingConfig()
@@ -168,6 +192,7 @@ public struct ZielConfig: Codable, Equatable {
     public var behavior: BehaviorConfig = BehaviorConfig()
     public var display: DisplayConfig = DisplayConfig()
     public var speech: SpeechConfig = SpeechConfig()
+    public var waveform: WaveformConfig = WaveformConfig()
 
     public init() {}
     public init(from decoder: Decoder) throws {
@@ -178,6 +203,7 @@ public struct ZielConfig: Codable, Equatable {
         behavior = try c.decodeIfPresent(BehaviorConfig.self, forKey: .behavior) ?? behavior
         display = try c.decodeIfPresent(DisplayConfig.self, forKey: .display) ?? display
         speech = try c.decodeIfPresent(SpeechConfig.self, forKey: .speech) ?? speech
+        waveform = try c.decodeIfPresent(WaveformConfig.self, forKey: .waveform) ?? waveform
     }
 
     public static func decode(_ data: Data) throws -> ZielConfig {
