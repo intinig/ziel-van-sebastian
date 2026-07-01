@@ -80,7 +80,9 @@ public final class ElevenLabsTTS: SpeechSynthesizing {
         else { throw TTSError.malformedResponse }
         let words = AlignmentMapper.words(from: alignment)
         guard !words.isEmpty else { throw TTSError.malformedResponse }
-        return SpokenAudio(requestID: requestID, words: words, pcm: pcm, sampleRate: sampleRate)
+        let envelope = AmplitudeEnvelope.from(pcm: pcm, sampleRate: sampleRate, rate: 60)
+        return SpokenAudio(requestID: requestID, words: words, pcm: pcm, sampleRate: sampleRate,
+                           envelope: envelope, envelopeRate: 60)
     }
 
     public func fetch(_ request: SpeechRequest, previousRequestIDs: [String],
