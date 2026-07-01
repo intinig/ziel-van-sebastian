@@ -3,7 +3,7 @@ import MetalKit
 /// Owns the offscreen textures and post-process passes:
 /// sceneTex → persist (ping-pong) → bright → blurH → blurV → composite.
 final class CRTPipeline {
-    /// MUST match the Metal CRTParams layout field-for-field (incl. pad0, pad1).
+    /// MUST match the Metal CRTParams layout field-for-field.
     struct Params {
         var scanlineIntensity: Float
         var scanlinePitch: Float
@@ -15,8 +15,10 @@ final class CRTPipeline {
         var noise: Float
         var persistence: Float
         var time: Float
-        var pad0: Float = 0
-        var pad1: Float = 0
+        var rippleStrength: Float = 0
+        var rippleSpeed: Float = 0
+        var rippleLevel: Float = 0
+        var rippleEnabled: Float = 0
         var resolution: SIMD2<Float>
 
         init(_ c: ShaderConfig, time: Float, resolution: SIMD2<Float>) {
@@ -61,7 +63,7 @@ final class CRTPipeline {
 
     init(device: MTLDevice, library: MTLLibrary,
          drawableFormat: MTLPixelFormat, shaderConfig: ShaderConfig) throws {
-        assert(MemoryLayout<Params>.stride == 56, "CRTParams layout drifted from Metal struct")
+        assert(MemoryLayout<Params>.stride == 64, "CRTParams layout drifted from Metal struct")
         self.device = device
         self.shaderConfig = shaderConfig
 
@@ -100,11 +102,15 @@ final class CRTPipeline {
 
     /// Scene already rendered into sceneTex. Runs all post passes and
     /// composites into the drawable's render pass.
-    func run(cmd: MTLCommandBuffer, drawableRPD: MTLRenderPassDescriptor, time: Float) {
+    func run(cmd: MTLCommandBuffer, drawableRPD: MTLRenderPassDescriptor, time: Float, level: Float) {
         let (prev, next) = pingIsA ? (phosphorA!, phosphorB!) : (phosphorB!, phosphorA!)
         pingIsA.toggle()
         var params = Params(shaderConfig, time: time,
                             resolution: SIMD2(Float(size.width), Float(size.height)))
+        params.rippleEnabled = (waveform.enabled && waveform.ripple.enabled) ? 1 : 0
+        params.rippleStrength = Float(waveform.ripple.strength)
+        params.rippleSpeed = Float(waveform.ripple.speed)
+        params.rippleLevel = level
 
         func pass(into target: MTLTexture, pipeline: MTLRenderPipelineState,
                   textures: [MTLTexture], loadAction: MTLLoadAction = .dontCare) {

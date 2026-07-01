@@ -58,7 +58,7 @@ final class ZielRenderer: NSObject, MTKViewDelegate {
             enc.endEncoding()
         }
 
-        crt.run(cmd: cmd, drawableRPD: drawableRPD, time: Float(now))
+        crt.run(cmd: cmd, drawableRPD: drawableRPD, time: Float(now), level: Float(scene.level))
 
         cmd.present(drawable)
         cmd.commit()
