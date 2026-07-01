@@ -61,6 +61,7 @@ public final class ConversationController {
 
     public func replyStarted(now: TimeInterval) -> [ConversationCommand] {
         guard state != .idle else { return [] }
+        // .speaking has no tick timeout by design, so windowStart is intentionally not reset here.
         state = .speaking
         return [.setWakeMode(.speaking)]
     }

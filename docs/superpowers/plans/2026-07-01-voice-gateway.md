@@ -514,6 +514,11 @@ Anticipated tasks (detailed in the Phase 2 plan): new `VoiceGateway` tool target
 
 Anticipated tasks: `VoiceGatewayClient` (local-WS client, reconnecting like `GatewayClient`); a coordinator that feeds voice events + Director speaking-state into `ConversationController` and executes its commands (`inject` → `GatewayClient.sendPrompt`; `stopSpeaking` → `Director.dropPendingSpeech` + stop playback; `setWakeMode` → `VoiceGatewayClient`); follow-up window driven by `tick`; barge-in end-to-end (AirPods interim, PowerConf for open-air); audio input/output device selection wired to `voice.inputDevice`/`outputDevice` for hardware echo cancellation; remove the Task-4 dev trigger; degradation paths (gateway down / disabled → display-only); README/docs.
 
+**Deferred hooks from Phase 1 (carried from the final review — do not lose):**
+- **Config live-reload of `voice`:** `AppDelegate.watchConfig` currently pushes `pacing`/`look`/`waveform`/`speech` but NOT `voice` (no runtime consumer existed in Phase 1). Add the `voice` push when the coordinator lands.
+- **`sendPrompt` handshake gate:** `GatewayClient.sendPrompt` guards only on `task != nil`, so a prompt sent between socket-open and hello-ok would use the default `mainSessionKey`. Gate on `handshakeComplete` (queue/drop until hello-ok) once a real coordinator can call it any time.
+- **Reconcile the two barge-in entry points:** `bargeInDetected` → `.listening` (await transcript) vs `heard`-while-`.speaking` → `.awaitingReply` (stop+inject). Pick one per the real gateway event model (VAD-onset events vs finals-only) and add the `.speaking→heard` test — it's easy to regress silently.
+
 ## Self-Review
 
 - **Spec coverage (Phase 1 slice):** injection path → Tasks 1 & 4; conversation/follow-up/barge-in logic → Task 3; config + off-by-default → Task 2; degradation → enforced by Global Constraints + Phase 3. Audio/STT/wake/device-selection → Phase 2/3 roadmap (deliberately deferred behind spikes). Output-path/WhatsApp needs no change (existing subscription).
