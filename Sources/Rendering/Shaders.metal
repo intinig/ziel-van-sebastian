@@ -152,12 +152,12 @@ fragment float4 composite_fragment(V2F in [[stage_in]],
         float2 cc = uv - 0.5; cc.x *= aspect;
         float dist = length(cc);
         float wave = sin(dist * 42.0 - p.time * p.rippleSpeed);
-        float fall = 1.0 - smoothstep(0.0, 0.95, dist);  // ordered edges (MSL leaves edge0>edge1 undefined)
+        float fall = 1.0 - smoothstep(0.5, 1.5, dist);   // full strength across mid-field, taper out to the screen corners
         float amt = p.rippleStrength * (0.15 + 0.85 * p.rippleLevel) * fall;
         dir = dist > 1e-4 ? cc / dist : float2(0.0);
         dir.x /= aspect;
-        duv = dir * wave * amt * 0.03;
-        ca = amt * 0.006;
+        duv = dir * wave * amt * 0.08;
+        ca = amt * 0.016;
     }
     float3 color = float3(phosphor.sample(s, uv + duv + dir * ca).r,
                           phosphor.sample(s, uv + duv).g,
