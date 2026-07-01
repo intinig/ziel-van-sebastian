@@ -323,5 +323,8 @@ final class GatewayIntegrationTests: XCTestCase {
         let params = frame?["params"] as? [String: Any]
         XCTAssertEqual(params?["message"] as? String, "hello there")
         XCTAssertEqual(params?["sessionKey"] as? String, "agent:main:main")
+        // idempotencyKey is REQUIRED by the gateway schema (else INVALID_REQUEST).
+        XCTAssertFalse((params?["idempotencyKey"] as? String ?? "").isEmpty,
+                       "chat.send must include a non-empty idempotencyKey")
     }
 }

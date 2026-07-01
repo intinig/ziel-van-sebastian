@@ -30,7 +30,9 @@ public enum OpenClawTranslator {
         [
             "type": "req", "id": id,
             "method": "chat.send",
-            "params": ["sessionKey": mainSessionKey, "message": text],
+            // idempotencyKey is REQUIRED by the gateway's chat.send schema (verified
+            // live 2026-07-01: omitting it → INVALID_REQUEST). Reuse the unique request id.
+            "params": ["sessionKey": mainSessionKey, "message": text, "idempotencyKey": id],
         ]
     }
 
