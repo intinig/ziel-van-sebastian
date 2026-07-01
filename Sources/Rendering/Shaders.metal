@@ -152,7 +152,7 @@ fragment float4 composite_fragment(V2F in [[stage_in]],
         float2 cc = uv - 0.5; cc.x *= aspect;
         float dist = length(cc);
         float wave = sin(dist * 42.0 - p.time * p.rippleSpeed);
-        float fall = smoothstep(0.95, 0.0, dist);
+        float fall = 1.0 - smoothstep(0.0, 0.95, dist);  // ordered edges (MSL leaves edge0>edge1 undefined)
         float amt = p.rippleStrength * (0.15 + 0.85 * p.rippleLevel) * fall;
         dir = dist > 1e-4 ? cc / dist : float2(0.0);
         dir.x /= aspect;
