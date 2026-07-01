@@ -41,6 +41,8 @@ final class ElevenLabsTTSTests: XCTestCase {
                        "character_end_times_seconds": [0.1, 0.2]}}
         """
         let audio = try ElevenLabsTTS.parseResponse(Data(json.utf8), requestID: "rid")
+        XCTAssertFalse(audio.envelope.isEmpty)   // envelope computed from the PCM
+        XCTAssertEqual(audio.envelopeRate, 60)
         XCTAssertEqual(audio.requestID, "rid")
         XCTAssertEqual(audio.pcm, pcm)
         XCTAssertEqual(audio.words, [WordTiming(text: "Hi", start: 0.0, end: 0.2)])

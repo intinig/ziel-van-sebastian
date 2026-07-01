@@ -58,7 +58,7 @@ final class ZielRenderer: NSObject, MTKViewDelegate {
             enc.endEncoding()
         }
 
-        crt.run(cmd: cmd, drawableRPD: drawableRPD, time: Float(now))
+        crt.run(cmd: cmd, drawableRPD: drawableRPD, time: Float(now), level: Float(scene.level))
 
         cmd.present(drawable)
         cmd.commit()
@@ -140,6 +140,10 @@ final class ZielRenderer: NSObject, MTKViewDelegate {
             }
 
         case .speaking:
+            if crt.waveform.enabled {
+                scenePass.drawHalo(encoder: encoder, viewW: viewW, viewH: viewH,
+                                   level: scene.level, tint: scene.tint)
+            }
             if let word = scene.word {
                 // Pop-in: 80ms scale 0.96→1.0, alpha 0.2→1.0.
                 let pop = min(1.0, scene.wordAge / 0.08)

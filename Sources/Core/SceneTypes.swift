@@ -48,12 +48,14 @@ public struct SceneState: Equatable {
     public let hint: String?
     public let dozing: Bool
     public let tint: ColorRGB
+    /// Smoothed speaking amplitude 0…1 (drives the waveform); 0 when not speaking.
+    public let level: Double
 
     public init(phase: Phase, phaseProgress: Double, timeInPhase: TimeInterval,
                 word: String?, wordAge: TimeInterval, hint: String?,
-                dozing: Bool, tint: ColorRGB) {
+                dozing: Bool, tint: ColorRGB, level: Double) {
         self.phase = phase; self.phaseProgress = phaseProgress
         self.timeInPhase = timeInPhase; self.word = word; self.wordAge = wordAge
-        self.hint = hint; self.dozing = dozing; self.tint = tint
+        self.hint = hint; self.dozing = dozing; self.tint = tint; self.level = level
     }
 }

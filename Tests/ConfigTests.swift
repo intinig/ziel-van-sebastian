@@ -80,4 +80,26 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(cfg.speech.speed, 1.1)
         XCTAssertEqual(cfg.speech.volume, 0.8)
     }
+
+    func testWaveformDefaults() {
+        let c = ZielConfig()
+        XCTAssertTrue(c.waveform.enabled)
+        XCTAssertTrue(c.waveform.ripple.enabled)
+        XCTAssertEqual(c.waveform.ripple.strength, 0.10, accuracy: 1e-9)
+        XCTAssertEqual(c.waveform.ripple.speed, 2.0, accuracy: 1e-9)
+    }
+
+    func testWaveformPartialDecodeKeepsDefaults() throws {
+        let json = #"{"waveform":{"ripple":{"strength":0.4}}}"#
+        let c = try ZielConfig.decode(Data(json.utf8))
+        XCTAssertTrue(c.waveform.enabled)
+        XCTAssertTrue(c.waveform.ripple.enabled)
+        XCTAssertEqual(c.waveform.ripple.strength, 0.4, accuracy: 1e-9)
+        XCTAssertEqual(c.waveform.ripple.speed, 2.0, accuracy: 1e-9)
+    }
+
+    func testWaveformDisableDecodes() throws {
+        let c = try ZielConfig.decode(Data(#"{"waveform":{"enabled":false}}"#.utf8))
+        XCTAssertFalse(c.waveform.enabled)
+    }
 }

@@ -248,4 +248,49 @@ final class DirectorSpeechTests: XCTestCase {
         XCTAssertFalse(spoken.contains("Background reply."),
                        "text that arrived on a hidden Space must not be replayed via run adoption")
     }
+
+
+    func testLevelZeroWhenNotSpeaking() {
+        let d = makeSpeechDirector()
+        d.handle(.connectionUp, now: 0)
+        XCTAssertEqual(d.tick(now: 1).level, 0, accuracy: 0.0001)
+    }
+
+    func testLevelRisesWithEnvelopeThenReleasesAfterSpeech() {
+        let d = makeSpeechDirector()
+        d.handle(.connectionUp, now: 0)
+        d.handle(.textDelta(run: "r1", session: "main", text: "Talk. "), now: 1)
+        let req = d.takeSpeechRequests()[0]
+        _ = d.tick(now: 2)
+        d.speechStarted(id: req.id, words: [WordTiming(text: "Talk.", start: 0, end: 2)],
+                        envelope: [Float](repeating: 1.0, count: 120), envelopeRate: 60, now: 2.0)
+        let a = d.tick(now: 2.02).level
+        let b = d.tick(now: 2.10).level
+        XCTAssertGreaterThan(b, a)                       // attack: rising toward the loud voice
+        XCTAssertGreaterThan(d.tick(now: 2.5).level, 0.8)
+        _ = d.tick(now: 2.95)
+        d.speechFinished(id: req.id, now: 3.0)
+        let c = d.tick(now: 3.02).level
+        let e = d.tick(now: 3.20).level
+        XCTAssertLessThan(e, c)                          // release: easing toward 0
+        XCTAssertLessThan(e, 0.3)
+    }
+
+    func testLevelContinuousAcrossWordChanges() {
+        let d = makeSpeechDirector()
+        d.handle(.connectionUp, now: 0)
+        d.handle(.textDelta(run: "r1", session: "main", text: "One two three. "), now: 1)
+        let req = d.takeSpeechRequests()[0]
+        _ = d.tick(now: 2)
+        d.speechStarted(id: req.id, words: [
+            WordTiming(text: "One", start: 0, end: 0.3),
+            WordTiming(text: "two", start: 0.3, end: 0.6),
+            WordTiming(text: "three.", start: 0.6, end: 1.0),
+        ], envelope: [Float](repeating: 1.0, count: 90), envelopeRate: 60, now: 2.0)
+        _ = d.tick(now: 2.4)
+        let duringTwo = d.tick(now: 2.55).level
+        let duringThree = d.tick(now: 2.75).level        // a word boundary was crossed
+        XCTAssertGreaterThan(duringTwo, 0.7)
+        XCTAssertGreaterThan(duringThree, 0.7)           // level did not dip on the word change
+    }
 }

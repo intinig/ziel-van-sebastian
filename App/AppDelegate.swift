@@ -97,7 +97,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let scene = director?.tick(now: now)
                     ?? SceneState(phase: .offline(auth: false), phaseProgress: 1, timeInPhase: 0,
                                   word: nil, wordAge: 0, hint: nil, dozing: false,
-                                  tint: ColorRGB(r: 0.1, g: 0.3, b: 0.1))
+                                  tint: ColorRGB(r: 0.1, g: 0.3, b: 0.1), level: 0)
                 // MTKView keeps rendering while Ziel is on a background Space, so
                 // gate the pump on visibility — otherwise text that arrives while
                 // hidden gets spoken. spaceVisible is false between swipe-away and
@@ -107,6 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         )
         self.renderer = renderer
+        renderer.crt.waveform = config.waveform
         mtkView.delegate = renderer
 
         let window: NSWindow
@@ -230,6 +231,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                let freshLook = try? ResolvedLook.resolve(fresh.look, themeOverride: self?.options.theme) {
                 self?.config = fresh
                 renderer.crt.shaderConfig = freshLook.shader
+                renderer.crt.waveform = fresh.waveform
                 director.updatePacing(fresh.pacing)
                 director.setSpeechEnabled(fresh.speech.enabled)
                 self?.speech?.volume = fresh.speech.volume

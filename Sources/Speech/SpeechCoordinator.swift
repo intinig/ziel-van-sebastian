@@ -145,7 +145,9 @@ public final class SpeechCoordinator {
         synth.play(audio, volume: volume,
             onStarted: { [weak self] in
                 guard let self, gen == self.generation, self.playing == head else { return }
-                self.director.speechStarted(id: head, words: audio.words, now: self.now())
+                self.director.speechStarted(id: head, words: audio.words,
+                                            envelope: audio.envelope, envelopeRate: audio.envelopeRate,
+                                            now: self.now())
             },
             onFinished: { [weak self] in
                 guard let self, gen == self.generation, self.playing == head else { return }

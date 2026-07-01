@@ -57,8 +57,10 @@ struct CRTParams {
     float noise;
     float persistence;
     float time;
-    float pad0;                // keep float2 aligned identically in Swift+MSL
-    float pad1;
+    float rippleStrength;
+    float rippleSpeed;
+    float rippleLevel;
+    float rippleEnabled;
     float2 resolution;
 };
 
@@ -140,8 +142,27 @@ fragment float4 composite_fragment(V2F in [[stage_in]],
         return float4(0, 0, 0, 1);
     }
 
-    float3 color = phosphor.sample(s, uv).rgb;
-    color += bloom.sample(s, uv).rgb * p.bloomStrength;
+    // Water ripple: radial UV displacement + faint chromatic split. Motion is
+    // time-driven (never resets on words); intensity rides rippleLevel.
+    float2 duv = float2(0.0);
+    float2 dir = float2(0.0);
+    float ca = 0.0;
+    if (p.rippleEnabled > 0.5 && p.rippleLevel > 0.001) {
+        float aspect = p.resolution.x / max(p.resolution.y, 1.0);
+        float2 cc = uv - 0.5; cc.x *= aspect;
+        float dist = length(cc);
+        float wave = sin(dist * 42.0 - p.time * p.rippleSpeed);
+        float fall = 1.0 - smoothstep(0.0, 0.95, dist);  // ordered edges (MSL leaves edge0>edge1 undefined)
+        float amt = p.rippleStrength * (0.15 + 0.85 * p.rippleLevel) * fall;
+        dir = dist > 1e-4 ? cc / dist : float2(0.0);
+        dir.x /= aspect;
+        duv = dir * wave * amt * 0.03;
+        ca = amt * 0.006;
+    }
+    float3 color = float3(phosphor.sample(s, uv + duv + dir * ca).r,
+                          phosphor.sample(s, uv + duv).g,
+                          phosphor.sample(s, uv + duv - dir * ca).b);
+    color += bloom.sample(s, uv + duv).rgb * p.bloomStrength;
 
     // Scanlines: period controlled by scanlinePitch (output pixels per half-period).
     float line = sin(uv.y * p.resolution.y * (3.14159265 / max(p.scanlinePitch, 1.0)));
