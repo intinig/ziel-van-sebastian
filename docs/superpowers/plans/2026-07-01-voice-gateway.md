@@ -407,8 +407,10 @@ Wire prompt injection end-to-end so a typed prompt reaches OpenClaw and the face
 - Test: `Tests/GatewayIntegrationTests.swift`
 
 **Interfaces:**
-- Consumes: verified prompt frame from Task 1.
+- Consumes: verified prompt frame from Task 1 — `chat.send` with `params:{sessionKey, message}` (user text in `message`).
 - Produces: `OpenClawTranslator.promptFrame(text:id:mainSessionKey:) -> [String: Any]`; `GatewayClient.sendPrompt(_ text: String)`.
+
+> **PREREQUISITE (ops, blocks the live smoke test):** ziel's paired device (`clientId:"gateway-client"`) is currently granted **`operator.read` only**, so `chat.send` will be rejected. Before Step 8, re-approve the device on vm-claw with a write scope (`operator.write`) — e.g. via `openclaw devices` pairing approval. The unit test (Steps 1–6) runs against MockGateway and does not need this; only the on-device smoke (Step 8) does.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -423,9 +425,10 @@ func testSendPromptDeliversFrame() throws {
     waitForHandshake(client)                                  // existing helper / expectation
     client.sendPrompt("hello there")
 
-    let frame = try waitForFrame(server) { $0["method"] as? String == "chat.send" }  // <- Task 1's method
+    let frame = try waitForFrame(server) { $0["method"] as? String == "chat.send" }  // verified 2026-07-01
     let params = frame["params"] as? [String: Any]
-    XCTAssertEqual(params?["text"] as? String, "hello there")                          // <- Task 1's text key
+    XCTAssertEqual(params?["message"] as? String, "hello there")                       // verified: user text in "message"
+    XCTAssertEqual(params?["sessionKey"] as? String, "agent:main:main")                // main session
     XCTAssertEqual(frame["type"] as? String, "req")
 }
 ```
@@ -449,8 +452,8 @@ Add a static function that builds the verified frame (all protocol knowledge sta
 static func promptFrame(text: String, id: String, mainSessionKey: String) -> [String: Any] {
     [
         "type": "req", "id": id,
-        "method": "chat.send",                              // <- Task 1's verified method
-        "params": ["sessionKey": mainSessionKey, "text": text],  // <- Task 1's verified params
+        "method": "chat.send",                              // verified 2026-07-01
+        "params": ["sessionKey": mainSessionKey, "message": text],  // verified: user text goes in "message" (NOT "text")
     ]
 }
 ```
