@@ -144,4 +144,52 @@ final class SpeechCoordinatorTests: XCTestCase {
         synth.fetches[0].completion(.success(audio([WordTiming(text: "One.", start: 0, end: 0.4)])))
         XCTAssertEqual(synth.fetches.count, 2)               // queued fetches discarded, none started
     }
+
+    // A lost playback completion — e.g. AVAudioEngine stops on an audio
+    // route/config change mid-buffer, so the player node's `.dataPlayedBack`
+    // callback never fires — leaves `playing` set forever. Every later sentence
+    // still fetches successfully and is retained in `ready` (each holding PCM),
+    // but playback never advances. The backlog grows unbounded with traffic
+    // until the process is OOM-killed. This characterizes the crash; once fixed,
+    // the final assertion flips to "playback recovers".
+    // A lost playback completion — e.g. AVAudioEngine stops on an audio
+    // route/config change mid-buffer, so the player node's `.dataPlayedBack`
+    // callback never fires — must not strand the pipeline. The per-frame
+    // watchdog advances once the current clip has run past its audio length
+    // plus a grace margin, so playback recovers and the fetched-but-unplayed
+    // backlog drains instead of growing until the process is OOM-killed.
+    func testWatchdogRecoversFromLostPlaybackCompletion() {
+        let d = makeDirector()
+        let synth = FakeSynth()
+        var clock: TimeInterval = 0
+        let co = SpeechCoordinator(director: d, synth: synth, volume: 1, now: { clock })
+        d.handle(.connectionUp, now: 0)
+        d.handle(.textDelta(run: "r", session: "m",
+                            text: "One. Two. Three. Four. Five. Six. "), now: 0.1)
+        co.pump()
+
+        // First sentence plays and starts — but its completion is lost.
+        synth.fetches[0].completion(.success(audio([WordTiming(text: "One.", start: 0, end: 0.4)])))
+        XCTAssertEqual(synth.played.count, 1)
+        synth.playCallbacks[0].onStarted()
+        // (deliberately NO onFinished — the engine never reported playback done)
+
+        // Every remaining sentence fetches successfully as fetch slots free up.
+        var i = 1
+        while i < synth.fetches.count {
+            synth.fetches[i].completion(.success(audio([WordTiming(text: "w", start: 0, end: 0.4)])))
+            i += 1
+        }
+        XCTAssertEqual(synth.fetches.count, 6, "all six sentences were fetched")
+
+        // Before the clip's deadline, the pipeline correctly keeps waiting.
+        clock = 1.0
+        co.pump()
+        XCTAssertEqual(synth.played.count, 1, "must not cut a clip short before its deadline")
+
+        // Past the audio length + grace, the watchdog advances and playback resumes.
+        clock = 5.0
+        co.pump()
+        XCTAssertEqual(synth.played.count, 2, "watchdog recovered the stalled pipeline")
+    }
 }

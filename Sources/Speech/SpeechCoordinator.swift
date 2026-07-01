@@ -9,6 +9,14 @@ public final class SpeechCoordinator {
     /// far ahead buys nothing anyway — playback is serial — so stay at the floor.
     private static let maxConcurrentFetches = 2
 
+    /// If a clip runs past its own audio length by this margin without the synth
+    /// reporting completion, assume the completion was lost — e.g. AVAudioEngine
+    /// stopped mid-buffer on an audio route/config change, so `.dataPlayedBack`
+    /// never fired — and advance anyway. Without this, one lost completion
+    /// strands `playing` forever and the fetched-but-unplayed backlog grows
+    /// until the process is OOM-killed.
+    private static let playbackWatchdogGrace: TimeInterval = 2.0
+
     private let director: Director
     private let synth: SpeechSynthesizing
     private let now: () -> TimeInterval
@@ -17,6 +25,8 @@ public final class SpeechCoordinator {
     private var awaitingPlay: [Int] = []          // request ids in arrival order
     private var ready: [Int: SpokenAudio] = [:]   // fetched, not yet played
     private var playing: Int?
+    private var playingStartedAt: TimeInterval?   // when the current clip began (watchdog)
+    private var playingDeadline: TimeInterval = 0 // audio length + grace, relative to start
     private var previousRequestIDs: [String] = [] // best-effort continuity stitching
     private var generation = 0                    // cancelAll() invalidates callbacks
     private var consecutiveFailures = 0
@@ -32,6 +42,7 @@ public final class SpeechCoordinator {
 
     /// Called once per frame tick (main thread), after director.tick.
     public func pump() {
+        serviceWatchdog()
         for req in director.takeSpeechRequests() {
             if circuitOpen {
                 // Spec: invalid key/voice → log once (done when the circuit
@@ -55,9 +66,24 @@ public final class SpeechCoordinator {
         awaitingPlay.removeAll()
         ready.removeAll()
         playing = nil
+        playingStartedAt = nil
         consecutiveFailures = 0
         circuitOpen = false
         synth.stopPlayback()
+    }
+
+    /// Recover from a lost playback completion: if the current clip has run past
+    /// its audio length + grace and the synth still hasn't reported it finished,
+    /// treat it as done so the pipeline drains instead of stranding `playing`.
+    private func serviceWatchdog() {
+        guard let id = playing, let startedAt = playingStartedAt,
+              now() - startedAt > playingDeadline else { return }
+        NSLog("speech: playback watchdog fired for id %d — advancing past a lost completion", id)
+        synth.stopPlayback()
+        playing = nil
+        playingStartedAt = nil
+        director.speechFinished(id: id, now: now())
+        playNextIfReady()
     }
 
     private func startFetchesWithinCap() {
@@ -113,15 +139,18 @@ public final class SpeechCoordinator {
         awaitingPlay.removeFirst()
         ready[head] = nil
         playing = head
+        playingStartedAt = now()
+        playingDeadline = Double(audio.pcm.count / 2) / audio.sampleRate + Self.playbackWatchdogGrace
         let gen = generation
         synth.play(audio, volume: volume,
             onStarted: { [weak self] in
-                guard let self, gen == self.generation else { return }
+                guard let self, gen == self.generation, self.playing == head else { return }
                 self.director.speechStarted(id: head, words: audio.words, now: self.now())
             },
             onFinished: { [weak self] in
-                guard let self, gen == self.generation else { return }
+                guard let self, gen == self.generation, self.playing == head else { return }
                 self.playing = nil
+                self.playingStartedAt = nil
                 self.director.speechFinished(id: head, now: self.now())
                 self.playNextIfReady()
             })

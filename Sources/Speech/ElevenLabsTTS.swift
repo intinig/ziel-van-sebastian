@@ -12,10 +12,32 @@ public final class ElevenLabsTTS: SpeechSynthesizing {
     private let engine = AVAudioEngine()
     private let player = AVAudioPlayerNode()
     private var engineReady = false
+    private var configObserver: NSObjectProtocol?
 
     public init(config: SpeechConfig, session: URLSession = .shared) {
         self.config = config
         self.session = session
+        // The engine stops itself when the audio route/hardware changes (dock or
+        // display sleep, output device swap). If we don't rebuild the graph the
+        // next play() restarts a torn-down engine and the in-flight buffer's
+        // completion is lost. Tear down here so the next play() re-attaches,
+        // reconnects at the new hardware format, and restarts cleanly.
+        configObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            NSLog("speech: audio engine configuration changed — rebuilding graph")
+            self.engine.stop()
+            if self.engineReady {
+                self.engine.disconnectNodeOutput(self.player)
+                self.engine.detach(self.player)
+                self.engineReady = false
+            }
+        }
+    }
+
+    deinit {
+        if let configObserver { NotificationCenter.default.removeObserver(configObserver) }
     }
 
     enum TTSError: Error {
