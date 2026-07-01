@@ -60,8 +60,14 @@ final class DisplayManager {
             window.orderOut(nil)   // no displays at all; wait for the next change
             return
         }
-        window.setFrame(screen.frame, display: true)
-        window.makeKeyAndOrderFront(nil)
+        // While in native fullscreen the window owns its Space; re-setting the
+        // frame fights macOS. Only position it when not (yet) fullscreen — the
+        // initial place() runs before toggleFullScreen, so launch still lands on
+        // the target display.
+        if !window.styleMask.contains(.fullScreen) {
+            window.setFrame(screen.frame, display: true)
+            window.makeKeyAndOrderFront(nil)
+        }
         // Idempotent — NSCursor.hide() is refcounted and would accumulate on
         // every display reconfiguration, so we deliberately don't call it.
         NSCursor.setHiddenUntilMouseMoves(true)

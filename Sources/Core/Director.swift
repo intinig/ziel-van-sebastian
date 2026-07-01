@@ -101,6 +101,29 @@ public final class Director {
         lastActivity = now
     }
 
+    /// Returning from a hidden Space (the render loop — and the speech pump —
+    /// was paused while Ziel was on another desktop): discard speech that
+    /// queued while we weren't watching so it isn't replayed, and clear the
+    /// display word. `runs`/`focusedRun`/`phase` are left intact, so the next
+    /// `advance(now:)` resumes live — speaking new text or winding down.
+    public func dropPendingSpeech(now: TimeInterval) {
+        speechQueue.removeAll()
+        outbox.removeAll()
+        chunker = SentenceChunker()
+        pacer.reset()
+        currentWord = nil
+        wordFromPacer = true
+        // Non-focused runs buffer their text in `pending` (not the speech queues),
+        // and each run's stripper holds partial in-flight markdown. Clear both for
+        // every run so text that arrived while hidden can't be replayed later via
+        // adoptPendingRun — otherwise multi-run sessions still catch up on return.
+        for run in runs.keys {
+            runs[run]?.pending = ""
+            runs[run]?.stripper = MarkdownStreamStripper()
+        }
+        lastActivity = now
+    }
+
     /// Number of tracked runs — for tests and diagnostics only.
     public var runCount: Int { runs.count }
 

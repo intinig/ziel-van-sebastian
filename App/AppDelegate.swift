@@ -12,6 +12,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var configWatcher: DispatchSourceFileSystemObject?
     private var gateway: GatewayClient?
     private var speech: SpeechCoordinator?
+    private var occlusionObserver: NSObjectProtocol?
+    private var spaceVisible = true
 
     init(options: RunOptions) {
         self.options = options
@@ -96,7 +98,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     ?? SceneState(phase: .offline(auth: false), phaseProgress: 1, timeInPhase: 0,
                                   word: nil, wordAge: 0, hint: nil, dozing: false,
                                   tint: ColorRGB(r: 0.1, g: 0.3, b: 0.1))
-                self?.speech?.pump()
+                // MTKView keeps rendering while Ziel is on a background Space, so
+                // gate the pump on visibility — otherwise text that arrives while
+                // hidden gets spoken. spaceVisible is false between swipe-away and
+                // swipe-back; it stays true on the --window path (no observer).
+                if self?.spaceVisible ?? true { self?.speech?.pump() }
                 return scene
             }
         )
@@ -112,11 +118,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.center()
         } else {
             window = NSWindow(contentRect: NSScreen.main?.frame ?? .zero,
-                              styleMask: [.borderless],
+                              styleMask: [.titled, .closable, .miniaturizable, .resizable],
                               backing: .buffered, defer: false)
-            window.level = .mainMenu + 1
-            window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
-            NSApp.presentationOptions = [.hideDock, .hideMenuBar]
+            // Hidden chrome so nothing shows if the window is ever seen pre-fullscreen;
+            // .fullScreenPrimary lets it own a Space you can three-finger-swipe to.
+            window.titleVisibility = .hidden
+            window.titlebarAppearsTransparent = true
+            window.styleMask.insert(.fullSizeContentView)
+            window.collectionBehavior = [.fullScreenPrimary]
             self.displayManager = DisplayManager(window: window, config: config.display)
         }
         window.contentView = mtkView
@@ -126,6 +135,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Place/front only after contentView is set, so the appliance never
         // shows an empty window. No-op on the --window path (displayManager nil).
         displayManager?.activate()
+        if !options.window {
+            // Native fullscreen → a dedicated Space macOS switches to; swipe away
+            // for a work desktop and back. Placed on the target screen first.
+            window.toggleFullScreen(nil)
+        }
+
+        if !options.window {
+            // Speak only while Ziel's Space is the one on screen. MTKView keeps
+            // rendering on a background Space, so the sceneProvider gates pump() on
+            // spaceVisible (above); here we handle the edges — on swipe-away go
+            // quiet and clear queued audio, on swipe-back drop whatever text accrued
+            // while hidden and resume live. occlusionState loses .visible exactly
+            // when you swipe to another Space (this window is alone on its own Space).
+            occlusionObserver = NotificationCenter.default.addObserver(
+                forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main
+            ) { [weak self, clock] _ in
+                guard let self, let window = self.window else { return }
+                let visible = window.occlusionState.contains(.visible)
+                guard visible != self.spaceVisible else { return }
+                self.spaceVisible = visible
+                if visible {
+                    // Re-arm the one-shot cursor hide: moving the mouse on the work
+                    // desktop consumed DisplayManager's, so the pointer would linger
+                    // over the face on return until the next place().
+                    NSCursor.setHiddenUntilMouseMoves(true)
+                    self.director?.dropPendingSpeech(now: clock())   // skip the backlog, resume live
+                } else {
+                    self.speech?.cancelAll()                          // go quiet now, clear queues
+                }
+            }
+        }
 
         watchConfig(at: configURL, renderer: renderer, director: director)
     }
@@ -134,6 +174,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         gateway?.stop()
+        if let occlusionObserver { NotificationCenter.default.removeObserver(occlusionObserver) }
     }
 
     private func applyDebugState(director: Director, clock: () -> TimeInterval) {
