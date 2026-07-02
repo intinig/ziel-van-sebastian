@@ -6,7 +6,7 @@ public struct SegmenterConfig: Equatable {
     public var startFrames: Int = 3          // consecutive speech frames to open (~96 ms)
     public var hangoverFrames: Int = 25      // trailing silent frames to close (~800 ms)
     public var maxFrames: Int = 940          // hard cap (~30 s) so a stuck-open utterance can't grow unbounded
-    public var preRollFrames: Int = 10       // frames of context kept before the opening frame (~320 ms)
+    public var preRollFrames: Int = 10       // pre-speech context; on open the whole ring (preRollFrames + startFrames, ~416 ms at defaults) becomes the utterance's lead-in
     public init() {}
 }
 
@@ -44,6 +44,7 @@ public final class UtteranceSegmenter {
         current += frame
         frameCount += 1
         silenceStreak = prob < config.endThreshold ? silenceStreak + 1 : 0
+        // Hangover-close and cap-close are intentionally unified: downstream cannot tell truncated speech from a natural pause.
         if silenceStreak >= config.hangoverFrames || frameCount >= config.maxFrames {
             let samples = current
             resetInternal()
