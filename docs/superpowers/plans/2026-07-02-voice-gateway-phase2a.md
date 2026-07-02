@@ -657,7 +657,7 @@ public final class VoiceGatewayServer {
 ### Task 6: `WhisperSTT` + `SileroVAD` wrappers (VoiceGatewaySTT; opt-in tests)
 
 **Files:**
-- Create: `Sources/VoiceGatewaySTT/WhisperSTT.swift`, `Sources/VoiceGatewaySTT/SileroVAD.swift`, `TestsVoice/WhisperSTTTests.swift`, `TestsVoice/Fixtures/sebastian-weather.wav` (generate: `say -o /tmp/f.aiff "Sebastian, what's the weather today?" && afconvert -f WAVE -d LEI16@16000 -c 1 /tmp/f.aiff TestsVoice/Fixtures/sebastian-weather.wav`)
+- Create: `Sources/VoiceGatewaySTT/WhisperSTT.swift`, `Sources/VoiceGatewaySTT/SileroVAD.swift`, `TestsVoice/WhisperSTTTests.swift`, `TestsVoice/Fixtures/sebastian-weather.wav` (generate: `say -o /tmp/f.aiff "Sebastian, what's the weather today?" && afconvert -f WAVE -d LEI16@16000 -c 1 --no-filler /tmp/f.aiff TestsVoice/Fixtures/sebastian-weather.wav` (--no-filler is REQUIRED — see WhisperSTTTests comment))
 - Modify: `project.yml` (`VoiceGatewayTests.sources` gains a resources ref for Fixtures — add `- path: TestsVoice` with `buildPhase: sources` default plus `Fixtures` via `type: folder` resource; simplest: list `TestsVoice/Fixtures` as a `resources` entry on the target)
 
 **Interfaces:**

@@ -8,6 +8,9 @@ final class WhisperSTTTests: XCTestCase {
     private func fixtureSamples() throws -> [Float] {
         let url = Bundle(for: Self.self).url(forResource: "sebastian-weather", withExtension: "wav")!
         let wav = try Data(contentsOf: url)
+        // Fixture must be a bare 44-byte-header WAV. Regenerate ONLY with --no-filler:
+        //   say -o /tmp/f.aiff "Sebastian, what's the weather today?" && afconvert -f WAVE -d LEI16@16000 -c 1 --no-filler /tmp/f.aiff TestsVoice/Fixtures/sebastian-weather.wav
+        // (without --no-filler, afconvert may insert a FLLR chunk before "data", silently mis-parsing into garbage floats)
         let pcm16 = wav.dropFirst(44).withUnsafeBytes { Array($0.bindMemory(to: Int16.self)) }
         return pcm16.map { Float($0) / 32768.0 }
     }
