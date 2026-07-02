@@ -21,6 +21,11 @@ public final class MockGatewayServer {
     private var _didReceiveSubscribe = false
     public var didReceiveSubscribe: Bool { queue.sync { _didReceiveSubscribe } }
 
+    /// All post-handshake client request frames received so far, in order.
+    /// Serialized through `queue` so cross-thread reads have a happens-before edge.
+    private var _receivedFrames: [[String: Any]] = []
+    public var receivedFrames: [[String: Any]] { queue.sync { _receivedFrames } }
+
     /// Tracks which connections have successfully subscribed (by ObjectIdentifier).
     private var subscribedConnections: Set<ObjectIdentifier> = []
 
@@ -174,6 +179,8 @@ public final class MockGatewayServer {
             guard let self, error == nil, let data else { return }
             if let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
                obj["type"] as? String == "req", let id = obj["id"] as? String {
+                // On `queue` (receiveMessage callbacks run there) — safe write.
+                self._receivedFrames.append(obj)
                 let method = obj["method"] as? String
                 if method == "sessions.subscribe" {
                     // On `queue` (receiveMessage callbacks run there) — safe write.

@@ -290,4 +290,41 @@ final class GatewayIntegrationTests: XCTestCase {
         XCTAssertTrue(earlyEvents.isEmpty,
                       "Channel frames before subscribe must be gated; got: \(earlyEvents)")
     }
+
+    // MARK: - Prompt injection (chat.send)
+
+    func testSendPromptDeliversFrame() throws {
+        let server = try MockGatewayServer(requestedPort: 0, expectToken: "tok", steps: [])
+        try server.start()
+        defer { server.stop() }
+
+        let collector = Collector()
+        let client = makeClient(port: server.port, collector: collector)
+        client.start()
+        defer { client.stop() }
+
+        // Wait for the handshake to complete before sending the prompt.
+        let handshakeDeadline = Date().addingTimeInterval(5)
+        while Date() < handshakeDeadline && !collector.snapshot().contains(.connectionUp) {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+
+        client.sendPrompt("hello there")
+
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline &&
+              !server.receivedFrames.contains(where: { $0["method"] as? String == "chat.send" }) {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+
+        let frame = server.receivedFrames.first { $0["method"] as? String == "chat.send" }
+        XCTAssertNotNil(frame, "GatewayClient must send a chat.send frame")
+        XCTAssertEqual(frame?["type"] as? String, "req")
+        let params = frame?["params"] as? [String: Any]
+        XCTAssertEqual(params?["message"] as? String, "hello there")
+        XCTAssertEqual(params?["sessionKey"] as? String, "agent:main:main")
+        // idempotencyKey is REQUIRED by the gateway schema (else INVALID_REQUEST).
+        XCTAssertFalse((params?["idempotencyKey"] as? String ?? "").isEmpty,
+                       "chat.send must include a non-empty idempotencyKey")
+    }
 }

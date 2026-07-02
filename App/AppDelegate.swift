@@ -68,6 +68,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 NSLog("device identity unavailable at %@ — connecting without device pairing (gateway will clear scopes)",
                       identityURL.path)
             }
+            // TEMPORARY (Task 4 dev trigger, removed in Phase 3 when the real
+            // voice coordinator lands): ZIEL_VOICE_DEV_PROMPT, if set, is injected
+            // once as a one-shot prompt right after the gateway handshake completes
+            // (.connectionUp), exercising the input→OpenClaw→output loop without a
+            // mic. Firing on handshake — not a fixed delay — avoids racing connect.
+            let devPrompt = ProcessInfo.processInfo.environment["ZIEL_VOICE_DEV_PROMPT"]
+            var devPromptSent = false
             let gateway = GatewayClient(
                 url: url,
                 token: config.gateway.token,
@@ -76,6 +83,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     DispatchQueue.main.async {
                         if case .connectionDown = event { self?.speech?.cancelAll() }
                         director?.handle(event, now: clock())
+                        if case .connectionUp = event, let p = devPrompt, !p.isEmpty, !devPromptSent {
+                            devPromptSent = true
+                            NSLog("ZIEL_VOICE_DEV_PROMPT: sending dev prompt %@", p)
+                            self?.gateway?.sendPrompt(p)
+                        }
                     }
                 }
             )

@@ -102,4 +102,23 @@ final class ConfigTests: XCTestCase {
         let c = try ZielConfig.decode(Data(#"{"waveform":{"enabled":false}}"#.utf8))
         XCTAssertFalse(c.waveform.enabled)
     }
+
+    func testVoiceDefaults() {
+        let c = ZielConfig()
+        XCTAssertFalse(c.voice.enabled)
+        XCTAssertEqual(c.voice.wakeWord, "Sebastian")
+        XCTAssertEqual(c.voice.gatewayURL, "ws://127.0.0.1:18790")
+        XCTAssertEqual(c.voice.model, "base.en")
+        XCTAssertEqual(c.voice.wakeThreshold, 0.5, accuracy: 1e-9)
+        XCTAssertEqual(c.voice.followUpWindowSeconds, 8, accuracy: 1e-9)
+        XCTAssertTrue(c.voice.bargeIn)
+    }
+
+    func testVoicePartialDecode() throws {
+        let json = #"{"voice":{"enabled":true,"followUpWindowSeconds":5}}"#
+        let c = try ZielConfig.decode(Data(json.utf8))
+        XCTAssertTrue(c.voice.enabled)
+        XCTAssertEqual(c.voice.followUpWindowSeconds, 5, accuracy: 1e-9)
+        XCTAssertEqual(c.voice.wakeWord, "Sebastian")   // untouched default
+    }
 }

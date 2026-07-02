@@ -20,6 +20,22 @@ public struct TranslationContext: Equatable {
 
 public enum OpenClawTranslator {
 
+    // MARK: - Outbound frame builders
+
+    /// Builds the `chat.send` request frame that injects a user prompt into the
+    /// main OpenClaw session. Verified 2026-07-01 (Task 1 spike): user text goes
+    /// in `message` (NOT `text`); response is `{ runId, status }` and the reply
+    /// streams back via the existing `agent`/`session.message` events.
+    public static func promptFrame(text: String, id: String, mainSessionKey: String) -> [String: Any] {
+        [
+            "type": "req", "id": id,
+            "method": "chat.send",
+            // idempotencyKey is REQUIRED by the gateway's chat.send schema (verified
+            // live 2026-07-01: omitting it → INVALID_REQUEST). Reuse the unique request id.
+            "params": ["sessionKey": mainSessionKey, "message": text, "idempotencyKey": id],
+        ]
+    }
+
     // MARK: - Agent-stream translation (stateless, unchanged)
 
     public static func translate(_ data: Data) -> [AgentEvent] {

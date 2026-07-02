@@ -141,7 +141,7 @@ final class ScenePass {
         let segments = 96
         encoder.setRenderPipelineState(flatPipeline)
         for k in 0..<3 {
-            let radius = minDim * 0.20 + Double(k) * minDim * 0.055 + level * minDim * 0.16
+            let radius = minDim * 0.28 + Double(k) * minDim * 0.055 + level * minDim * 0.16
             let thickness = max(1.0, 2.4 - Double(k) * 0.5)
             let alpha = min(1.0, (0.5 - Double(k) * 0.13) * (0.4 + 0.6 * level))
             guard alpha > 0.001 else { continue }
