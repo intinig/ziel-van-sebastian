@@ -575,6 +575,7 @@ public final class VoiceGatewayServer {
 
     public init(requestedPort: UInt16) throws {
         let params = NWParameters.tcp
+        params.requiredInterfaceType = .loopback   // no-auth design is only valid because non-loopback connections are impossible (kernel-enforced)
         let ws = NWProtocolWebSocket.Options()
         ws.autoReplyPing = true
         params.defaultProtocolStack.applicationProtocols.insert(ws, at: 0)
