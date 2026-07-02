@@ -16,4 +16,13 @@ test: gen
 run: build
 	./$(APP) --window --demo
 
-.PHONY: gen build test run
+vendor: ## Build whisper.cpp static libs into Vendor/ (one-time)
+	[ -d Vendor/whisper/lib ] || ./scripts/vendor-whisper.sh
+
+models: ## Fetch whisper + VAD models to Application Support
+	./scripts/fetch-voice-models.sh
+
+test-voice: vendor gen ## Opt-in voice tests (needs Vendor/ + models)
+	xcodebuild -project ZielVanSebastian.xcodeproj -scheme VoiceGatewayTests -destination 'platform=macOS' test | tail -20
+
+.PHONY: gen build test run vendor models test-voice
