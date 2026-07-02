@@ -112,6 +112,7 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(c.voice.wakeThreshold, 0.5, accuracy: 1e-9)
         XCTAssertEqual(c.voice.followUpWindowSeconds, 8, accuracy: 1e-9)
         XCTAssertTrue(c.voice.bargeIn)
+        XCTAssertEqual(c.voice.vadModelPath, "")
     }
 
     func testVoicePartialDecode() throws {
@@ -120,5 +121,6 @@ final class ConfigTests: XCTestCase {
         XCTAssertTrue(c.voice.enabled)
         XCTAssertEqual(c.voice.followUpWindowSeconds, 5, accuracy: 1e-9)
         XCTAssertEqual(c.voice.wakeWord, "Sebastian")   // untouched default
+        XCTAssertEqual(c.voice.vadModelPath, "")         // untouched default
     }
 }

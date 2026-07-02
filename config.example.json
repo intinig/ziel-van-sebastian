@@ -45,6 +45,7 @@
     "model": "base.en",
     "modelPath": "",
     "wakeModelPath": "",
+    "vadModelPath": "",
     "wakeThreshold": 0.5,
     "inputDevice": "",
     "outputDevice": "",
