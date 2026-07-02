@@ -14,7 +14,9 @@ targets:
     platform: macOS
     sources:
       - App
-      - Sources
+      - path: Sources
+        excludes:
+          - "VoiceGatewaySTT/**"
     settings:
       base:
         PRODUCT_NAME: Ziel van Sebastian
@@ -60,7 +62,11 @@ targets:
     type: bundle.unit-test
     platform: macOS
     sources:
-      - TestsVoice
+      - path: TestsVoice
+        excludes:
+          - "Fixtures/**"
+      - path: TestsVoice/Fixtures
+        buildPhase: resources
       - Sources/Core
       - Sources/VoiceGatewayKit
       - Sources/VoiceGatewaySTT
