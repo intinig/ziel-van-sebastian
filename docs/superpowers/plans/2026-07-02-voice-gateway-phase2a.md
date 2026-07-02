@@ -607,6 +607,9 @@ public final class VoiceGatewayServer {
         queue.sync { connections.forEach { $0.cancel() }; connections.removeAll() }
     }
 
+    /// Test-support only: current active connection count.
+    public var connectionCount: Int { queue.sync { connections.count } }
+
     public func broadcast(_ e: VoiceEvent) {
         let data = VoiceProtocol.encode(e)
         queue.async { [weak self] in self?.connections.forEach { self?.send($0, data: data) } }
@@ -631,7 +634,8 @@ public final class VoiceGatewayServer {
     private func receiveLoop(_ conn: NWConnection) {
         conn.receiveMessage { [weak self, weak conn] data, _, _, error in
             guard let self, let conn, error == nil else { return }
-            if let data, let cmd = VoiceProtocol.decodeCommand(data) {
+            guard let data else { conn.cancel(); return }   // graceful EOF → prune via .cancelled
+            if let cmd = VoiceProtocol.decodeCommand(data) {
                 self.onCommand?(cmd)
             }
             self.receiveLoop(conn)

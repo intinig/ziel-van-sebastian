@@ -37,4 +37,26 @@ final class VoiceGatewayServerTests: XCTestCase {
         wait(for: [heard], timeout: 5)
         task.cancel(with: .goingAway, reason: nil)
     }
+
+
+    func testGracefulClientClosePrunesConnection() throws {
+        let server = try VoiceGatewayServer(requestedPort: 0)
+        try server.start()
+        defer { server.stop() }
+        let session = URLSession(configuration: .ephemeral)
+        let task = session.webSocketTask(with: URL(string: "ws://127.0.0.1:\(server.port)")!)
+        task.resume()
+        // Wait until the server has the connection (ready event implies accept ran).
+        let ready = expectation(description: "ready")
+        task.receive { _ in ready.fulfill() }
+        wait(for: [ready], timeout: 5)
+        XCTAssertEqual(server.connectionCount, 1)
+        task.cancel(with: .goingAway, reason: nil)
+        // Poll until pruned (graceful close must cancel + prune, not leak).
+        let deadline = Date().addingTimeInterval(5)
+        while server.connectionCount > 0 && Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        XCTAssertEqual(server.connectionCount, 0, "graceful close must prune the connection")
+    }
 }
