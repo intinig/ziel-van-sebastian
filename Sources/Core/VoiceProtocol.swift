@@ -50,7 +50,15 @@ public enum VoiceProtocol {
     public static func encode(_ c: VoiceCommand) -> Data {
         let obj: [String: Any]
         switch c {
-        case .mode(let m): obj = ["cmd": "mode", "mode": modeNames.first { $0.0 == m }!.1]
+        case .mode(let m):
+            let name: String
+            switch m {
+            case .armed:    name = "armed"
+            case .listen:   name = "listen"
+            case .speaking: name = "speaking"
+            case .followUp: name = "followup"
+            }
+            obj = ["cmd": "mode", "mode": name]
         case .stop:        obj = ["cmd": "stop"]
         }
         return try! JSONSerialization.data(withJSONObject: obj)

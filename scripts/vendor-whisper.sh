@@ -7,7 +7,8 @@ PIN=v1.9.1
 BUILD=.vendor-build/whisper.cpp
 if [ ! -d "$BUILD" ]; then
   mkdir -p .vendor-build
-  git clone --depth 1 --branch "$PIN" https://github.com/ggml-org/whisper.cpp.git "$BUILD"
+  git clone --depth 1 --branch "$PIN" https://github.com/ggml-org/whisper.cpp.git "$BUILD.tmp"
+  mv "$BUILD.tmp" "$BUILD"
 fi
 cmake -S "$BUILD" -B "$BUILD/build" -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
   -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \

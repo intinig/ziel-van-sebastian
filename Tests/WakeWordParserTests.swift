@@ -14,4 +14,9 @@ final class WakeWordParserTests: XCTestCase {
         XCTAssertNil(WakeWordParser.match(transcript: "sebastians car", wakeWord: "Sebastian"))
         XCTAssertNil(WakeWordParser.match(transcript: "", wakeWord: "Sebastian"))
     }
+    func testExoticFoldingDoesNotTrap() {
+        // "ﬆ" (U+FB06) folds to "st": the transcript is 8 graphemes but its fold
+        // prefixes the 9-grapheme folded wake word — must return nil, not trap.
+        XCTAssertNil(WakeWordParser.match(transcript: "Sebaﬆian", wakeWord: "Sebastian"))
+    }
 }
