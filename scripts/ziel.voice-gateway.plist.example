@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  TEMPLATE — not meant to be loaded as-is. Copy it, edit the placeholders
+  below, then load the copy. See docs/voice-gateway.md ("launchd install")
+  for the full procedure.
+
+    cp scripts/ziel.voice-gateway.plist.example \
+      ~/Library/LaunchAgents/com.gintini.ziel.voice-gateway.plist
+    mkdir -p ~/Library/Logs/ziel
+    launchctl bootstrap gui/$(id -u) \
+      ~/Library/LaunchAgents/com.gintini.ziel.voice-gateway.plist
+
+  Placeholders to edit in your copy:
+    - ProgramArguments: the real, absolute path to the installed
+      voice-gateway binary. This repo doesn't prescribe a deploy location —
+      scripts/deploy.sh is gitignored and owner-maintained; add an install
+      step there and copy its resulting path here.
+    - StandardOutPath / StandardErrorPath: your real home directory.
+      launchd does not expand "~" inside a plist — use an absolute path.
+
+  IMPORTANT (TCC / microphone permission): run the binary once by hand,
+  logged in at the console, BEFORE loading this agent. The first launch
+  triggers a microphone-permission prompt that only a logged-in GUI session
+  can answer — a launchd-launched process has no session to click "Allow"
+  and will hang indefinitely waiting for a grant that can never come. See
+  docs/voice-gateway.md ("Microphone permission (TCC)").
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.gintini.ziel.voice-gateway</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/PATH/TO/INSTALLED/voice-gateway</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/YOUR_USERNAME/Library/Logs/ziel/voice-gateway.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/YOUR_USERNAME/Library/Logs/ziel/voice-gateway.log</string>
+</dict>
+</plist>
