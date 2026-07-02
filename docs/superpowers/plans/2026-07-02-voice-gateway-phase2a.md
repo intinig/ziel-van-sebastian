@@ -860,7 +860,12 @@ public final class AudioCapture {
             let samples = Array(UnsafeBufferPointer(start: ch[0], count: Int(out.frameLength)))
             self.queue.async { self.chunk(samples) }
         }
-        try engine.start()
+        do {
+            try engine.start()
+        } catch {
+            input.removeTap(onBus: 0)   // leave no tap behind so a retry of start() is safe
+            throw error
+        }
     }
 
     public func stop() {
