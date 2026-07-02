@@ -13,6 +13,9 @@ final class WakeWordParserTests: XCTestCase {
         XCTAssertNil(WakeWordParser.match(transcript: "hey there Sebastian", wakeWord: "Sebastian"))
         XCTAssertNil(WakeWordParser.match(transcript: "sebastians car", wakeWord: "Sebastian"))
         XCTAssertNil(WakeWordParser.match(transcript: "", wakeWord: "Sebastian"))
+        // Possessives are not addresses (straight and curly apostrophe).
+        XCTAssertNil(WakeWordParser.match(transcript: "Sebastian's car", wakeWord: "Sebastian"))
+        XCTAssertNil(WakeWordParser.match(transcript: "Sebastian\u{2019}s car", wakeWord: "Sebastian"))
     }
     func testExoticFoldingDoesNotTrap() {
         // "ﬆ" (U+FB06) folds to "st": the transcript is 8 graphemes but its fold

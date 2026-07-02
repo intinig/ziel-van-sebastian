@@ -13,7 +13,8 @@ public enum WakeWordParser {
         guard let after = text.index(text.startIndex, offsetBy: wake.count, limitedBy: text.endIndex) else { return nil }
         let rest = String(text[after...])
         // The wake word must end at a word boundary ("sebastians car" is not a wake).
-        if let first = rest.first, first.isLetter || first.isNumber { return nil }
+        // Apostrophes count as word-internal: "Sebastian's car" is possessive, not an address.
+        if let first = rest.first, first.isLetter || first.isNumber || first == "'" || first == "\u{2019}" { return nil }
         let charSet = CharacterSet.punctuationCharacters.union(.whitespacesAndNewlines)
         return String(rest.drop { $0.unicodeScalars.allSatisfy { charSet.contains($0) } })
     }
