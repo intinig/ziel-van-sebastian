@@ -57,4 +57,25 @@ final class VoicePipelineTests: XCTestCase {
         p.handle(.stop, resetSegmenter: { didReset = true })
         XCTAssertTrue(didReset)
     }
+
+    func testStopWhileSegmentOpenEmitsClosingVad() {
+        let (p, events) = make(transcript: "x")
+        p.segmenterEvent(.started)                 // opens a segment -> vad(true)
+        p.handle(.stop, resetSegmenter: {})        // mid-segment stop must close it
+        XCTAssertEqual(events(), [.vad(speaking: true), .vad(speaking: false)])
+    }
+
+    func testStopWithNoOpenSegmentEmitsNothing() {
+        let (p, events) = make(transcript: "x")
+        p.handle(.stop, resetSegmenter: {})
+        XCTAssertEqual(events(), [])
+    }
+
+    func testUtteranceThenStopDoesNotDoubleClose() {
+        let (p, events) = make(transcript: "")   // empty -> only vad(false) from utterance
+        p.segmenterEvent(.started)
+        p.segmenterEvent(.utterance([0.1]))        // closes the segment -> vad(false)
+        p.handle(.stop, resetSegmenter: {})        // already closed -> no extra vad(false)
+        XCTAssertEqual(events(), [.vad(speaking: true), .vad(speaking: false)])
+    }
 }
