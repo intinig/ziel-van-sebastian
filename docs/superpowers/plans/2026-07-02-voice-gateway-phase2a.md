@@ -1141,7 +1141,8 @@ do {
 2. `mode listen` command over WS → plain speech (no wake word) emits `heard`.
 3. `mode armed` → plain speech ignored; "Sebastian …" works.
 4. Silence for a minute → no events (VAD idle, CPU near zero — check Activity Monitor; whisper must NOT run on noise).
-5. Appliance (after PowerConf arrives): fetch models, install launchd agent, first-run TCC grant, repeat 1–4 with `voice.inputDevice: "PowerConf"`.
+5. Appliance with **AirPods** (before the PowerConf arrives — pair them to the Mac mini): fetch models, install launchd agent, first-run TCC grant, repeat 1–4 with `voice.inputDevice: "AirPods"`. AirPods' in-ear output also makes this the first barge-in-safe audio setup on the appliance.
+6. Appliance with the **PowerConf S3** once it arrives: switch `voice.inputDevice` to `"PowerConf"` and repeat — this is the production configuration (hardware AEC, open-air).
 
 ## Explicitly NOT in 2a
 
