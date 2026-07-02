@@ -65,7 +65,11 @@ public final class GatewayClient: NSObject, URLSessionWebSocketDelegate {
     /// no output-side handling needed here. No-op if not currently connected.
     public func sendPrompt(_ text: String) {
         queue.async { [weak self] in
-            guard let self, let task = self.task else { return }
+            guard let self else { return }
+            guard let task = self.task, self.handshakeComplete else {
+                self.log.error("sendPrompt dropped: gateway not connected/handshaked")
+                return
+            }
             let frame = OpenClawTranslator.promptFrame(
                 text: text, id: "prompt-\(UUID().uuidString)",
                 mainSessionKey: self.translationContext.mainSessionKey)

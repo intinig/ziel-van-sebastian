@@ -327,4 +327,29 @@ final class GatewayIntegrationTests: XCTestCase {
         XCTAssertFalse((params?["idempotencyKey"] as? String ?? "").isEmpty,
                        "chat.send must include a non-empty idempotencyKey")
     }
+
+    func testSendPromptDroppedBeforeHandshake() throws {
+        // requireDeviceAuth + identity:nil => server rejects connect; handshake never completes.
+        let server = try MockGatewayServer(requestedPort: 0, expectToken: "tok",
+                                           requireDeviceAuth: true, steps: [])
+        try server.start()
+        defer { server.stop() }
+
+        let collector = Collector()
+        let client = makeClient(port: server.port, identity: nil, collector: collector)
+        client.start()
+        defer { client.stop() }
+
+        // Fire prompts during the (doomed) handshake window.
+        for _ in 0..<5 { client.sendPrompt("should-not-send") }
+
+        let deadline = Date().addingTimeInterval(3)
+        while Date() < deadline && !collector.snapshot().contains(.connectionDown(auth: true)) {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+
+        XCTAssertFalse(server.receivedFrames.contains { $0["method"] as? String == "chat.send" },
+                       "sendPrompt before handshake completes must be dropped, not sent with a default key")
+    }
 }
