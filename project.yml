@@ -55,6 +55,9 @@ targets:
     settings:
       base:
         PRODUCT_NAME: voice-gateway
+        # Vendored whisper static libs are arm64-only (cmake native build); the
+        # dev Mac and the appliance are both Apple Silicon.
+        ARCHS: arm64
         # CLI tools have no bundle: embed the Info.plist in the binary so TCC
         # has a mic purpose string (else first-run permission can be denied/killed).
         GENERATE_INFOPLIST_FILE: YES
@@ -78,6 +81,7 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
+        ARCHS: arm64
         SWIFT_INCLUDE_PATHS: $(PROJECT_DIR)/Vendor/whisper/include
         LIBRARY_SEARCH_PATHS: $(PROJECT_DIR)/Vendor/whisper/lib
         OTHER_LDFLAGS: "-lwhisper -lggml -lggml-base -lggml-cpu -lggml-blas -lggml-metal -lc++ -framework Metal -framework MetalKit -framework Accelerate -framework AVFoundation -framework CoreAudio"
