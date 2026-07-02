@@ -9,7 +9,8 @@ if [ ! -d "$BUILD" ]; then
   mkdir -p .vendor-build
   git clone --depth 1 --branch "$PIN" https://github.com/ggml-org/whisper.cpp.git "$BUILD"
 fi
-cmake -S "$BUILD" -B "$BUILD/build" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
+cmake -S "$BUILD" -B "$BUILD/build" -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
+  -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
   -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON \
   -DWHISPER_BUILD_EXAMPLES=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF
 cmake --build "$BUILD/build" -j "$(sysctl -n hw.ncpu)"
