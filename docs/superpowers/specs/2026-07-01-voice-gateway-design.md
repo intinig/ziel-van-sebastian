@@ -182,6 +182,17 @@ Microphone required. Confirmed empirically: the appliance is `Mac16,10` (M4 Mac 
 9. Audio-device selection (input+output) for PowerConf AEC.
 10. Config, degradation, README/docs.
 
+## Addendum 2026-07-02 — Phase 2 review + toolchain spike results
+
+A fresh review before Phase 2 implementation, plus the completed toolchain spike, amends the above:
+
+- **Phase 2 is split: 2a ships usable voice with whisper-prefix wake; 2b (openWakeWord) is optional.** The spike measured whisper `base.en` at ~35 ms inference for a 2 s utterance (68 ms one-time model load, Metal). At that cost, VAD-gated whisper-prefix wake is cheap enough for production; openWakeWord/ONNX becomes an idle-CPU optimization done only if 2a proves noisy or hot. ONNX Runtime's official SwiftPM package declares macOS 14 support, so 2b remains viable when wanted.
+- **whisper.cpp integration = vendored static libs, not SwiftPM.** whisper.cpp (pinned **v1.9.1**) has dropped SwiftPM support. Verified working: cmake static build (`libwhisper.a` + ggml libs, Metal embedded) linked into Swift via a module map + `-lc++` + Metal/MetalKit/Accelerate frameworks. A committed `scripts/vendor-whisper.sh` produces a gitignored `Vendor/whisper/`; CI/dev run it once.
+- **VAD = whisper.cpp's built-in Silero VAD; the separate WebRTC-VAD dependency is dropped.** v1.9.1 ships a streaming VAD API (`whisper_vad_detect_speech_no_reset` → per-frame `whisper_vad_probs`). Utterance segmentation is a pure Core state machine over those probabilities (unit-testable); only a thin wrapper touches the C API. VAD model (`ggml-silero-v5.1.2`) fetched by the vendor script; new `voice.vadModelPath` config key.
+- **Targets split for test hermeticity:** `Sources/VoiceGatewayKit` (WS server + wiring, **no whisper linkage** — testable inside CoreTests like MockGatewayKit) vs `Sources/VoiceGatewaySTT` (whisper/VAD wrappers + audio capture, needs `Vendor/`), exercised by a separate opt-in `VoiceGatewayTests` target (`make test-voice`). `make test` stays hermetic.
+- **Gaps added to Phase 2a scope:** mic permission (TCC) handling + first-run interactive grant on the appliance; launchd user-agent + deploy story for the VoiceGateway service; whisper/VAD model provisioning (fetch script, `~/Library/Application Support/Ziel van Sebastian/models/`); explicit decision that the loopback WS has **no auth** (localhost-only, single-user appliance — revisit only if the port ever leaves loopback).
+- **Barge-in entry points (Phase 3 note):** the protocol carries both `vad {speaking}` (onset) and `heard {text}` (final), so `bargeInDetected` (fast path on onset) and `heard`-while-speaking (late-transcript fallback) are both correct; Phase 3 tests both rather than picking one.
+
 ## Out of Scope / Future
 
 - **Software AEC** — rely on hardware (PowerConf) / physics (AirPods). Open-air barge-in without a hardware-AEC device would need it.
