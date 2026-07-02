@@ -90,6 +90,19 @@ Speech never blocks the face: any failure (missing key, network, rate limit)
 falls back to the normal reading-pace display for that sentence, and three
 consecutive failures mute speech until the next reconnect.
 
+### Voice input (Phase 2a)
+
+An optional `voice-gateway` process — separate from the app, off by default —
+listens for "Sebastian, …" through the mic, transcribes it locally with
+whisper.cpp (no cloud), and emits wake/heard events over a loopback
+WebSocket. It runs independently: nothing in the app consumes those events
+yet (that wiring is Phase 3), so building or running it has no effect on the
+face either way.
+
+See [docs/voice-gateway.md](docs/voice-gateway.md) for building it, fetching
+models, the microphone-permission first-run step, and installing it as a
+launchd agent on the appliance.
+
 ### Device pairing (one-time)
 
 The app authenticates with a token **plus** an Ed25519 device identity

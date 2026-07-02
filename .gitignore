@@ -16,3 +16,7 @@ build/
 DerivedData/
 *.xcodeproj
 .swiftpm/
+
+# Vendored whisper.cpp toolchain (built by scripts/vendor-whisper.sh)
+Vendor/
+.vendor-build/

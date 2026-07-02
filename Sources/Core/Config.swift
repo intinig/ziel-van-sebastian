@@ -192,6 +192,7 @@ public struct VoiceConfig: Codable, Equatable {
     public var model: String = "base.en"
     public var modelPath: String = ""
     public var wakeModelPath: String = ""
+    public var vadModelPath: String = ""
     public var wakeThreshold: Double = 0.5
     public var inputDevice: String = ""
     public var outputDevice: String = ""
@@ -207,6 +208,7 @@ public struct VoiceConfig: Codable, Equatable {
         model = try c.decodeIfPresent(String.self, forKey: .model) ?? model
         modelPath = try c.decodeIfPresent(String.self, forKey: .modelPath) ?? modelPath
         wakeModelPath = try c.decodeIfPresent(String.self, forKey: .wakeModelPath) ?? wakeModelPath
+        vadModelPath = try c.decodeIfPresent(String.self, forKey: .vadModelPath) ?? vadModelPath
         wakeThreshold = try c.decodeIfPresent(Double.self, forKey: .wakeThreshold) ?? wakeThreshold
         inputDevice = try c.decodeIfPresent(String.self, forKey: .inputDevice) ?? inputDevice
         outputDevice = try c.decodeIfPresent(String.self, forKey: .outputDevice) ?? outputDevice

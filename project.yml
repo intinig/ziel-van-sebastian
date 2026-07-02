@@ -14,7 +14,9 @@ targets:
     platform: macOS
     sources:
       - App
-      - Sources
+      - path: Sources
+        excludes:
+          - "VoiceGatewaySTT/**"
     settings:
       base:
         PRODUCT_NAME: Ziel van Sebastian
@@ -38,9 +40,47 @@ targets:
       - Sources/Gateway
       - Sources/MockGatewayKit
       - Sources/Speech
+      - Sources/VoiceGatewayKit
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
+  VoiceGateway:
+    type: tool
+    platform: macOS
+    sources:
+      - VoiceGateway
+      - Sources/Core
+      - Sources/VoiceGatewayKit
+      - Sources/VoiceGatewaySTT
+    settings:
+      base:
+        PRODUCT_NAME: voice-gateway
+        # CLI tools have no bundle: embed the Info.plist in the binary so TCC
+        # has a mic purpose string (else first-run permission can be denied/killed).
+        GENERATE_INFOPLIST_FILE: YES
+        CREATE_INFOPLIST_SECTION_IN_BINARY: YES
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "voice-gateway listens for the wake word and transcribes speech locally on this Mac."
+        SWIFT_INCLUDE_PATHS: $(PROJECT_DIR)/Vendor/whisper/include
+        LIBRARY_SEARCH_PATHS: $(PROJECT_DIR)/Vendor/whisper/lib
+        OTHER_LDFLAGS: "-lwhisper -lggml -lggml-base -lggml-cpu -lggml-blas -lggml-metal -lc++ -framework Metal -framework MetalKit -framework Accelerate -framework AVFoundation -framework CoreAudio"
+  VoiceGatewayTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: TestsVoice
+        excludes:
+          - "Fixtures/**"
+      - path: TestsVoice/Fixtures
+        buildPhase: resources
+      - Sources/Core
+      - Sources/VoiceGatewayKit
+      - Sources/VoiceGatewaySTT
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_INCLUDE_PATHS: $(PROJECT_DIR)/Vendor/whisper/include
+        LIBRARY_SEARCH_PATHS: $(PROJECT_DIR)/Vendor/whisper/lib
+        OTHER_LDFLAGS: "-lwhisper -lggml -lggml-base -lggml-cpu -lggml-blas -lggml-metal -lc++ -framework Metal -framework MetalKit -framework Accelerate -framework AVFoundation -framework CoreAudio"
 schemes:
   ZielVanSebastian:
     build:
@@ -50,3 +90,11 @@ schemes:
     test:
       targets:
         - CoreTests
+  VoiceGatewayTests:
+    build:
+      targets:
+        VoiceGateway: all
+        VoiceGatewayTests: all
+    test:
+      targets:
+        - VoiceGatewayTests

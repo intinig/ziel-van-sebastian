@@ -518,6 +518,9 @@ Anticipated tasks: `VoiceGatewayClient` (local-WS client, reconnecting like `Gat
 - **Config live-reload of `voice`:** `AppDelegate.watchConfig` currently pushes `pacing`/`look`/`waveform`/`speech` but NOT `voice` (no runtime consumer existed in Phase 1). Add the `voice` push when the coordinator lands.
 - **`sendPrompt` handshake gate:** `GatewayClient.sendPrompt` guards only on `task != nil`, so a prompt sent between socket-open and hello-ok would use the default `mainSessionKey`. Gate on `handshakeComplete` (queue/drop until hello-ok) once a real coordinator can call it any time.
 - **Reconcile the two barge-in entry points:** `bargeInDetected` → `.listening` (await transcript) vs `heard`-while-`.speaking` → `.awaitingReply` (stop+inject). Pick one per the real gateway event model (VAD-onset events vs finals-only) and add the `.speaking→heard` test — it's easy to regress silently.
+- **VAD-state balance on `stop`:** the service resets an open segmenter without emitting `vad(speaking:false)` — the coordinator must self-clear VAD state when it sends `stop` (or the service should emit the closing event; decide in Phase 3).
+- **Mode resync on reconnect:** `ready` doesn't carry the service's current mode; the client must send its desired `mode` immediately after `ready` (make this the Phase-3 client convention).
+- **Codec hardening gate:** before wiring real network input, extend VoiceProtocol garbage-decode tests (wrong-typed/missing fields) and decide whether `WhisperSTT.transcribe` failures should emit `error` events (today: rc != 0 → "" → treated as silence; spec says report error).
 
 ## Self-Review
 

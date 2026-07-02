@@ -1,3 +1,5 @@
+SHELL := /bin/bash
+
 PROJECT = ZielVanSebastian
 DD = build
 APP = $(DD)/Build/Products/Debug/Ziel\ van\ Sebastian.app/Contents/MacOS/Ziel\ van\ Sebastian
@@ -16,4 +18,14 @@ test: gen
 run: build
 	./$(APP) --window --demo
 
-.PHONY: gen build test run
+vendor: ## Build whisper.cpp static libs into Vendor/ (one-time)
+	[ -d Vendor/whisper/lib ] || ./scripts/vendor-whisper.sh
+
+models: ## Fetch whisper + VAD models to Application Support
+	./scripts/fetch-voice-models.sh
+
+test-voice: vendor gen ## Opt-in voice tests (needs Vendor/ + models)
+	set -o pipefail; xcodebuild -project $(PROJECT).xcodeproj -scheme VoiceGatewayTests \
+	  -derivedDataPath $(DD) -destination 'platform=macOS' test | tail -20
+
+.PHONY: gen build test run vendor models test-voice

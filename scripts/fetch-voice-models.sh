@@ -1,0 +1,12 @@
+#!/bin/bash
+# Downloads whisper + VAD models to the app-support models dir (idempotent).
+set -euo pipefail
+DIR="$HOME/Library/Application Support/Ziel van Sebastian/models"
+mkdir -p "$DIR"
+[ -f "$DIR/ggml-base.en.bin" ] || { curl -fL -o "$DIR/ggml-base.en.bin.tmp" \
+  "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin" && \
+  mv "$DIR/ggml-base.en.bin.tmp" "$DIR/ggml-base.en.bin"; }
+[ -f "$DIR/ggml-silero-v5.1.2.bin" ] || { curl -fL -o "$DIR/ggml-silero-v5.1.2.bin.tmp" \
+  "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v5.1.2.bin" && \
+  mv "$DIR/ggml-silero-v5.1.2.bin.tmp" "$DIR/ggml-silero-v5.1.2.bin"; }
+ls -lh "$DIR"
