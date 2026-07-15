@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreAudio
 import Foundation
 
 /// Real synthesizer: ElevenLabs with-timestamps over URLSession, playback via
@@ -13,6 +14,10 @@ public final class ElevenLabsTTS: SpeechSynthesizing {
     private let player = AVAudioPlayerNode()
     private var engineReady = false
     private var configObserver: NSObjectProtocol?
+
+    /// Non-empty pins TTS output to a named device (e.g. the PowerConf) so mic
+    /// and speaker share one unit for hardware AEC. Set live from voice.outputDevice.
+    public var outputDeviceName: String = ""
 
     public init(config: SpeechConfig, session: URLSession = .shared) {
         self.config = config
@@ -139,6 +144,15 @@ public final class ElevenLabsTTS: SpeechSynthesizing {
             engine.attach(player)
             engine.connect(player, to: engine.mainMixerNode, format: format)
             engineReady = true
+        }
+        if !outputDeviceName.isEmpty,
+           let dev = AudioOutputDevice.find(named: outputDeviceName),
+           let unit = engine.outputNode.audioUnit {
+            var deviceID = dev
+            let err = AudioUnitSetProperty(unit, kAudioOutputUnitProperty_CurrentDevice,
+                                           kAudioUnitScope_Global, 0, &deviceID,
+                                           UInt32(MemoryLayout<AudioDeviceID>.size))
+            if err != noErr { NSLog("speech: failed to select output device '%@' (%d)", outputDeviceName, err) }
         }
         if !engine.isRunning {
             do { try engine.start() } catch {
