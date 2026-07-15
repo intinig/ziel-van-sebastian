@@ -10,6 +10,7 @@ public final class WhisperSTT {
     private let allowedLangIDs: [Int32]
 
     public init(modelPath: String, languages: [String] = []) throws {
+        _ = WhisperLogging.installOnce
         var cparams = whisper_context_default_params()
         cparams.use_gpu = true
         guard let ctx = whisper_init_from_file_with_params(modelPath, cparams) else {
