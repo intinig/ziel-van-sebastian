@@ -113,6 +113,7 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(c.voice.followUpWindowSeconds, 8, accuracy: 1e-9)
         XCTAssertTrue(c.voice.bargeIn)
         XCTAssertEqual(c.voice.vadModelPath, "")
+        XCTAssertEqual(c.voice.languages, [])
     }
 
     func testVoicePartialDecode() throws {
@@ -122,5 +123,12 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(c.voice.followUpWindowSeconds, 5, accuracy: 1e-9)
         XCTAssertEqual(c.voice.wakeWord, "Sebastian")   // untouched default
         XCTAssertEqual(c.voice.vadModelPath, "")         // untouched default
+        XCTAssertEqual(c.voice.languages, [])            // untouched default (missing key)
+    }
+
+    func testVoiceLanguagesDecode() throws {
+        let json = #"{"voice":{"languages":["it","en"]}}"#
+        let c = try ZielConfig.decode(Data(json.utf8))
+        XCTAssertEqual(c.voice.languages, ["it", "en"])
     }
 }

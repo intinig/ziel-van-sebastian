@@ -20,7 +20,7 @@ let port = URL(string: config.gatewayURL)?.port.flatMap { UInt16(exactly: $0) } 
 func log(_ s: String) { FileHandle.standardError.write(Data("[voice-gateway] \(s)\n".utf8)) }
 
 do {
-    let stt = try WhisperSTT(modelPath: sttPath)
+    let stt = try WhisperSTT(modelPath: sttPath, languages: config.languages)
     let vad = try SileroVAD(modelPath: vadPath)
     let server = try VoiceGatewayServer(requestedPort: port)
     let segmenter = UtteranceSegmenter()

@@ -198,6 +198,9 @@ public struct VoiceConfig: Codable, Equatable {
     public var outputDevice: String = ""
     public var followUpWindowSeconds: Double = 8
     public var bargeIn: Bool = true
+    // Clamp whisper's language auto-detection to this set (e.g. ["it", "en"]).
+    // Empty = detect among all ~100 whisper languages (current/default behavior).
+    public var languages: [String] = []
 
     public init() {}
     public init(from decoder: Decoder) throws {
@@ -214,6 +217,7 @@ public struct VoiceConfig: Codable, Equatable {
         outputDevice = try c.decodeIfPresent(String.self, forKey: .outputDevice) ?? outputDevice
         followUpWindowSeconds = try c.decodeIfPresent(Double.self, forKey: .followUpWindowSeconds) ?? followUpWindowSeconds
         bargeIn = try c.decodeIfPresent(Bool.self, forKey: .bargeIn) ?? bargeIn
+        languages = try c.decodeIfPresent([String].self, forKey: .languages) ?? languages
     }
 }
 

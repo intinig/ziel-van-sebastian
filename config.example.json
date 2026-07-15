@@ -50,6 +50,7 @@
     "inputDevice": "",
     "outputDevice": "",
     "followUpWindowSeconds": 8,
-    "bargeIn": true
+    "bargeIn": true,
+    "languages": []
   }
 }

@@ -87,6 +87,7 @@ binary always spins up the full mic → VAD → whisper → events pipeline.
 | `modelPath` | `""` (empty) | yes | Explicit path to a whisper ggml model, overriding `model` and the models-directory convention. |
 | `vadModelPath` | `""` (empty) | yes | Explicit path to the Silero VAD ggml model; empty resolves to `ggml-silero-v5.1.2.bin` in the models directory. |
 | `inputDevice` | `""` (empty) | yes | Case-insensitive **substring** match against CoreAudio input device names (e.g. `"PowerConf"` matches "Poly PowerConf S3 USB"). Empty means "system default input" — see the Bluetooth caveat below. |
+| `languages` | `[]` (empty) | yes | Clamp whisper language auto-detection to this set, e.g. `["it", "en"]`; empty = detect among all languages. Unknown codes are ignored (logged once); English-only (`*.en`) models always ignore this (there's only one language to pick). |
 | `enabled` | `false` | no | Reserved for Phase 3's app-side wiring; the standalone service ignores it entirely (see Run, above). |
 | `outputDevice`, `wakeModelPath`, `wakeThreshold`, `followUpWindowSeconds`, `bargeIn` | — | no | Present in `VoiceConfig` for forward-compatibility with Phase 2b (openWakeWord) and Phase 3 (barge-in, app injection). This service reads none of them today. |
 
