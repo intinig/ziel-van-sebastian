@@ -47,4 +47,21 @@ public enum AudioOutputDevice {
         }
         return nil
     }
+
+    /// The system's current default output device (whatever System Settings has
+    /// selected — built-in speakers, AirPods, etc). Used to unpin TTS playback
+    /// back to the default when `voice.outputDevice` is live-reloaded to "".
+    /// `nil` on failure (caller degrades gracefully — no playback is ever
+    /// blocked on this).
+    public static func systemDefaultOutput() -> AudioDeviceID? {
+        var addr = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+                                              mScope: kAudioObjectPropertyScopeGlobal,
+                                              mElement: kAudioObjectPropertyElementMain)
+        var deviceID = AudioDeviceID(0)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size, &deviceID) == noErr,
+              deviceID != kAudioObjectUnknown
+        else { return nil }
+        return deviceID
+    }
 }

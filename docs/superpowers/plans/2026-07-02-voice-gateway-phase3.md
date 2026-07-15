@@ -990,9 +990,32 @@ Then in `play(...)`, select the device immediately before the `if !engine.isRunn
             } else {
                 NSLog("speech: failed to select output device '%@' (%d)", outputDeviceName, err)
             }
+        } else if outputDeviceName.isEmpty, appliedDeviceID != nil,
+                  let unit = engine.outputNode.audioUnit {
+            // voice.outputDevice was live-reloaded back to "" — the audio unit is
+            // still pinned to the old device (nothing else reverts it), so
+            // explicitly reselect the system default output. Same no-verify-
+            // in-tests boundary as the pin above (manual verification only).
+            if let defaultDevice = AudioOutputDevice.systemDefaultOutput() {
+                var deviceID = defaultDevice
+                let err = AudioUnitSetProperty(unit, kAudioOutputUnitProperty_CurrentDevice,
+                                               kAudioUnitScope_Global, 0, &deviceID,
+                                               UInt32(MemoryLayout<AudioDeviceID>.size))
+                if err == noErr {
+                    appliedDeviceID = nil
+                } else {
+                    NSLog("speech: failed to revert output device to system default (%d)", err)
+                    // Leave appliedDeviceID set so this retries on the next play().
+                }
+            } else {
+                NSLog("speech: failed to query system default output device")
+                // Leave appliedDeviceID set so this retries on the next play().
+            }
         }
         if !engine.isRunning {
 ```
+
+`AudioOutputDevice.systemDefaultOutput()` (added alongside `find(named:)` in `AudioOutputDevice.swift`) queries `kAudioHardwarePropertyDefaultOutputDevice` on the system object via `AudioObjectGetPropertyData`, returning `nil` on failure (caller degrades gracefully — playback is never blocked on this).
 
 Also reset the tracker in the existing `AVAudioEngineConfigurationChange` observer (constructor, added in an earlier task), alongside where it resets `engineReady = false` on graph teardown — the device pin may not survive a hardware reconfiguration (dock/output swap), so forget it there too and let the next `play()` re-apply:
 
@@ -1049,7 +1072,7 @@ extension GatewayClient: PromptInjecting {}
 // Director already exposes `isSpeaking`.
 extension Director: SpeakingSource {}
 
-/// Barge-in stop: drop the Director's pending speech and clear queued TTS audio.
+/// Barge-in stop: abandon the Director's focused run (even mid-stream) and clear queued TTS audio.
 final class AppSpeechStopper: SpeechStopping {
     private weak var director: Director?
     private weak var speech: SpeechCoordinator?
@@ -1058,11 +1081,13 @@ final class AppSpeechStopper: SpeechStopping {
         self.speech = speech
     }
     func stopSpeaking(now: TimeInterval) {
-        director?.dropPendingSpeech(now: now)
+        director?.abandonFocusedRun(now: now)
         speech?.cancelAll()
     }
 }
 ```
+
+> **Post-Phase-3 update (PR #6 review):** `stopSpeaking` originally called `Director.dropPendingSpeech(now:)`, which only clears backlog while leaving `focusedRun` set — fine for the swipe-away/swipe-back Space case (the *other* `dropPendingSpeech` call site, in the occlusion observer, still uses it), but wrong for barge-in: if the interrupted run was still streaming, its next delta resumed speaking the old reply instead of yielding to the newly injected run. Fixed by adding `Director.abandonFocusedRun(now:)` (clears via `dropPendingSpeech`, then marks the old run `abandoned` and nils `focusedRun`); `route(_:from:)` now drops text from an `abandoned` run instead of buffering it in `pending`, and the run is evicted on its own `runEnded`. See `Tests/DirectorTests.swift` (`testBargeInMustAbandonStillStreamingFocusedRun`, `testAbandonedRunEvictedOnItsRunEnded`).
 
 - [ ] **Step 2: Add stored properties**
 

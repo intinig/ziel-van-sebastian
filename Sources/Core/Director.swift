@@ -9,6 +9,7 @@ public final class Director {
         var stripper = MarkdownStreamStripper()
         var pending = ""          // stripped text not yet fed to the pacer
         var ended = false
+        var abandoned = false     // barge-in dropped this run; route() discards its text silently
         var lastActivity: TimeInterval
     }
 
@@ -133,6 +134,23 @@ public final class Director {
         lastActivity = now
     }
 
+    /// Barge-in: abandon the currently focused run entirely, unlike `dropPendingSpeech`
+    /// (which clears backlog but keeps focus on the same run so it resumes live —
+    /// used for the swipe-away/swipe-back Space case). The interrupted run may still
+    /// be mid-stream from OpenClaw's side; marking it `abandoned` (rather than just
+    /// evicting it from `runs`) survives its future deltas — otherwise the next delta
+    /// would recreate the entry via `ensureRun` and, with `focusedRun == nil`, steal
+    /// focus back and resume speaking the old reply. `route` drops an abandoned run's
+    /// text instead of buffering it in `pending`, and it is evicted once its own
+    /// `runEnded` arrives (see `handle(.runEnded)`).
+    public func abandonFocusedRun(now: TimeInterval) {
+        dropPendingSpeech(now: now)
+        if let focused = focusedRun {
+            runs[focused]?.abandoned = true
+        }
+        focusedRun = nil
+    }
+
     /// Number of tracked runs — for tests and diagnostics only.
     public var runCount: Int { runs.count }
 
@@ -180,9 +198,11 @@ public final class Director {
                 } else {
                     pacer.endOfText()
                 }
-            } else if runs[run]!.pending.isEmpty {
-                // Tool-only or empty-text run: nothing left to say — evict now
-                // so days of background runs can't grow `runs` unboundedly.
+            } else if runs[run]!.abandoned || runs[run]!.pending.isEmpty {
+                // Tool-only/empty-text run, or a barge-in-abandoned run (route()
+                // drops its text instead of buffering, so pending is always empty):
+                // nothing left to say — evict now so days of background runs (or
+                // repeated barge-ins) can't grow `runs` unboundedly.
                 runs.removeValue(forKey: run)
             }
         }
@@ -266,6 +286,10 @@ public final class Director {
 
     private func route(_ stripped: String, from run: String) {
         guard !stripped.isEmpty else { return }
+        // Barge-in abandoned this run: discard its text silently, never buffer it
+        // in `pending` (that would let it resume via adoptPendingRun later) and
+        // never let it steal focus back.
+        guard runs[run]?.abandoned != true else { return }
         if focusedRun == nil {
             focusedRun = run
         }

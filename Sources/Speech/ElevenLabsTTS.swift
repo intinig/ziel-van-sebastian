@@ -174,6 +174,27 @@ public final class ElevenLabsTTS: SpeechSynthesizing {
             } else {
                 NSLog("speech: failed to select output device '%@' (%d)", outputDeviceName, err)
             }
+        } else if outputDeviceName.isEmpty, appliedDeviceID != nil,
+                  let unit = engine.outputNode.audioUnit {
+            // voice.outputDevice was live-reloaded back to "" — the audio unit is
+            // still pinned to the old device (nothing else reverts it), so
+            // explicitly reselect the system default output. Same no-verify-
+            // in-tests boundary as the pin above (manual verification only).
+            if let defaultDevice = AudioOutputDevice.systemDefaultOutput() {
+                var deviceID = defaultDevice
+                let err = AudioUnitSetProperty(unit, kAudioOutputUnitProperty_CurrentDevice,
+                                               kAudioUnitScope_Global, 0, &deviceID,
+                                               UInt32(MemoryLayout<AudioDeviceID>.size))
+                if err == noErr {
+                    appliedDeviceID = nil
+                } else {
+                    NSLog("speech: failed to revert output device to system default (%d)", err)
+                    // Leave appliedDeviceID set so this retries on the next play().
+                }
+            } else {
+                NSLog("speech: failed to query system default output device")
+                // Leave appliedDeviceID set so this retries on the next play().
+            }
         }
         if !engine.isRunning {
             do { try engine.start() } catch {

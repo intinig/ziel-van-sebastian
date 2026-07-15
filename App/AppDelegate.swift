@@ -291,7 +291,7 @@ extension GatewayClient: PromptInjecting {}
 // Director already exposes `isSpeaking`.
 extension Director: SpeakingSource {}
 
-/// Barge-in stop: drop the Director's pending speech and clear queued TTS audio.
+/// Barge-in stop: abandon the Director's focused run (even mid-stream) and clear queued TTS audio.
 final class AppSpeechStopper: SpeechStopping {
     private weak var director: Director?
     private weak var speech: SpeechCoordinator?
@@ -300,7 +300,7 @@ final class AppSpeechStopper: SpeechStopping {
         self.speech = speech
     }
     func stopSpeaking(now: TimeInterval) {
-        director?.dropPendingSpeech(now: now)
+        director?.abandonFocusedRun(now: now)
         speech?.cancelAll()
     }
 }
