@@ -21,6 +21,13 @@ public final class AudioCapture {
 
     public func start() throws {
         try requestMicAccessSync()
+        // Re-arm the lifecycle flags: a stopped-then-restarted instance must
+        // regain the configuration-change recovery path (beginRestart guards
+        // on `stopped`).
+        queue.sync {
+            stopped = false
+            restarting = false
+        }
         try configureAndStart()
         // A running AVAudioEngine's input can die silently when the device
         // reconfigures (sample-rate change, USB unplug/replug, etc.) — frames
