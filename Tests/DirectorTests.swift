@@ -160,4 +160,16 @@ final class DirectorTests: XCTestCase {
         }
         XCTAssertEqual(d.runCount, 0)
     }
+
+    func testIsSpeakingReflectsPhase() {
+        let cfg = ZielConfig()
+        let look = try! ResolvedLook.resolve(cfg.look, themeOverride: nil)
+        let d = Director(config: cfg, look: look)
+        d.handle(.connectionUp, now: 0)
+        XCTAssertFalse(d.isSpeaking)                                  // idle
+        d.handle(.runStarted(run: "r", session: "s"), now: 10)
+        d.handle(.textDelta(run: "r", session: "s", text: "Hello there. "), now: 10.2)
+        _ = d.tick(now: 11)
+        XCTAssertTrue(d.isSpeaking, "text delta must put the Director in .speaking")
+    }
 }
