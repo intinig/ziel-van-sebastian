@@ -544,7 +544,15 @@ public final class VoiceCoordinator {
             guard isSpeaking, bargeInEnabled(), speaking.isSpeaking else { return }
             execute(controller.bargeInDetected(now: now), now: now)
         case .heard(let text):
-            // Includes the transcript-beats-onset safety net when state == .speaking.
+            // Transcript-beats-onset safety net when state == .speaking — but only
+            // when barge-in is enabled. With `voice.bargeIn: false` this must be a
+            // coherent "never interrupt" mode, so a heard-while-speaking transcript
+            // is dropped here (mirrors the `.vad` gate above) instead of being
+            // routed through `controller.heard`, which would unconditionally
+            // return `[.stopSpeaking, .inject]` and both interrupt playback and
+            // advance the controller past `.speaking` (breaking the normal
+            // replyFinished → follow-up transition) even with barge-in off.
+            if controller.state == .speaking && !bargeInEnabled() { return }
             execute(controller.heard(text: text, now: now), now: now)
         case .error:
             break   // voice degrades silently; never wedge the face

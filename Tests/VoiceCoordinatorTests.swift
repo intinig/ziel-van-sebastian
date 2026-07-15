@@ -87,6 +87,26 @@ final class VoiceCoordinatorTests: XCTestCase {
         XCTAssertEqual(inj.prompts, ["actually stop"])
     }
 
+
+    func testHeardWhileSpeakingIgnoredWhenBargeInDisabled() {
+        // Mirrors testHeardWhileSpeakingSafetyNet with bargeIn: false — the
+        // decided "never interrupt" mode: a heard-while-speaking transcript must
+        // be dropped entirely, not just its `.inject`.
+        let (c, link, inj, spk, stop) = intoSpeaking(bargeIn: false)
+        c.handle(.heard(text: "actually stop"), now: 5)
+        XCTAssertEqual(stop.stops, 0, "must not stop speech when barge-in is disabled")
+        XCTAssertTrue(inj.prompts.isEmpty, "must not inject a heard-while-speaking transcript")
+        XCTAssertTrue(link.sent.isEmpty)
+
+        // Controller state must still be .speaking — not advanced to
+        // .awaitingReply by the dropped `heard` — so the normal
+        // speaking -> not-speaking transition still fires replyFinished.
+        spk.isSpeaking = false
+        c.tick(now: 6)
+        XCTAssertTrue(link.sent.contains(.mode(.followUp)),
+                      "controller state must remain .speaking so replyFinished still fires normally")
+    }
+
     func testVadOnsetIgnoredWhenNotSpeaking() {
         let (c, link, _, spk, stop) = make()
         spk.isSpeaking = false

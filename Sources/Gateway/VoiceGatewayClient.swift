@@ -45,6 +45,10 @@ public final class VoiceGatewayClient: NSObject, VoiceLink, URLSessionWebSocketD
             self.stopped = true
             self.task?.cancel(with: .normalClosure, reason: nil)
             self.task = nil
+            // Deliberately does NOT invalidate `session`: unlike `GatewayClient`
+            // (which is torn down for good on stop), this client is a restartable,
+            // app-lifetime instance — `voice.enabled` toggles stop()/start() on the
+            // same instance, and an invalidated URLSession can never open another task.
         }
     }
 
@@ -66,7 +70,12 @@ public final class VoiceGatewayClient: NSObject, VoiceLink, URLSessionWebSocketD
     }
 
     private func open() {
-        guard !stopped else { return }
+        // `task == nil` closes the gap where a disable→enable toggle lands inside
+        // a reconnect backoff window: handleDrop's pending timer fires `open()`
+        // again after `start()` has already opened a fresh socket, which would
+        // otherwise orphan it. handleDrop always nils `task` before scheduling,
+        // so this never blocks a legitimate (re)connect.
+        guard !stopped, task == nil else { return }
         dropReported = false
         let t = session.webSocketTask(with: url)
         task = t
