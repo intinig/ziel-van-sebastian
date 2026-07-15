@@ -14,6 +14,12 @@ public final class ElevenLabsTTS: SpeechSynthesizing {
     private let player = AVAudioPlayerNode()
     private var engineReady = false
     private var configObserver: NSObjectProtocol?
+    /// Device actually applied via AudioUnitSetProperty; nil means "not yet
+    /// applied" (default device, or a pin still pending discovery). Guards
+    /// against re-invoking AudioUnitSetProperty on every play() call — see
+    /// the engine-reconfiguration risk class noted below. Reset whenever the
+    /// graph is rebuilt so a real hardware/device change re-applies the pin.
+    private var appliedDeviceID: AudioDeviceID?
 
     /// Non-empty pins TTS output to a named device (e.g. the PowerConf) so mic
     /// and speaker share one unit for hardware AEC. Set live from voice.outputDevice.
@@ -37,6 +43,10 @@ public final class ElevenLabsTTS: SpeechSynthesizing {
                 self.engine.disconnectNodeOutput(self.player)
                 self.engine.detach(self.player)
                 self.engineReady = false
+                // The device pin may not survive a hardware reconfiguration (this
+                // is exactly the kind of route change — dock/output swap — that
+                // can invalidate it), so forget it and let the next play() re-apply.
+                self.appliedDeviceID = nil
             }
         }
     }
@@ -145,14 +155,25 @@ public final class ElevenLabsTTS: SpeechSynthesizing {
             engine.connect(player, to: engine.mainMixerNode, format: format)
             engineReady = true
         }
+        // Only re-invoke AudioUnitSetProperty when the resolved target actually
+        // changed. Setting it on every play() would re-trigger the engine's
+        // configuration-change path (see init) — the same lost-completion risk
+        // this file's comment warns about — for what is usually a no-op after
+        // the first sentence. outputDeviceName is live-reloadable, so we gate
+        // on the resolved device, not just "did we ever apply one".
         if !outputDeviceName.isEmpty,
            let dev = AudioOutputDevice.find(named: outputDeviceName),
+           dev != appliedDeviceID,
            let unit = engine.outputNode.audioUnit {
             var deviceID = dev
             let err = AudioUnitSetProperty(unit, kAudioOutputUnitProperty_CurrentDevice,
                                            kAudioUnitScope_Global, 0, &deviceID,
                                            UInt32(MemoryLayout<AudioDeviceID>.size))
-            if err != noErr { NSLog("speech: failed to select output device '%@' (%d)", outputDeviceName, err) }
+            if err == noErr {
+                appliedDeviceID = dev
+            } else {
+                NSLog("speech: failed to select output device '%@' (%d)", outputDeviceName, err)
+            }
         }
         if !engine.isRunning {
             do { try engine.start() } catch {

@@ -941,27 +941,60 @@ public enum AudioOutputDevice {
 
 - [ ] **Step 4: Wire it into `ElevenLabsTTS`**
 
-In `Sources/Speech/ElevenLabsTTS.swift`, add the property near the other stored properties (after `engineReady`):
+In `Sources/Speech/ElevenLabsTTS.swift`, add the property near the other stored properties (after `engineReady`), plus a tracker for the last device actually applied — `play()` runs once per sentence, so the selection must be gated on change or it re-invokes `AudioUnitSetProperty` on an already-running audio unit every sentence, which is exactly the engine-reconfiguration risk class described in this file's doc comment (lost in-flight buffer completions):
 
 ```swift
+    private var engineReady = false
+    private var configObserver: NSObjectProtocol?
+    /// Device actually applied via AudioUnitSetProperty; nil means "not yet
+    /// applied" (default device, or a pin still pending discovery). Guards
+    /// against re-invoking AudioUnitSetProperty on every play() call — see
+    /// the engine-reconfiguration risk class noted below. Reset whenever the
+    /// graph is rebuilt so a real hardware/device change re-applies the pin.
+    private var appliedDeviceID: AudioDeviceID?
+
     /// Non-empty pins TTS output to a named device (e.g. the PowerConf) so mic
     /// and speaker share one unit for hardware AEC. Set live from voice.outputDevice.
     public var outputDeviceName: String = ""
 ```
 
+`outputDeviceName` is live-reloadable (a later task re-sets it from config watching), so gate on the *resolved* device (`AudioDeviceID`), not on first-start/`engineReady` — that would silently ignore later config changes.
+
 Then in `play(...)`, select the device immediately before the `if !engine.isRunning` start block:
 
 ```swift
+        // Only re-invoke AudioUnitSetProperty when the resolved target actually
+        // changed. Setting it on every play() would re-trigger the engine's
+        // configuration-change path (see init) — the same lost-completion risk
+        // this file's comment warns about — for what is usually a no-op after
+        // the first sentence. outputDeviceName is live-reloadable, so we gate
+        // on the resolved device, not just "did we ever apply one".
         if !outputDeviceName.isEmpty,
            let dev = AudioOutputDevice.find(named: outputDeviceName),
+           dev != appliedDeviceID,
            let unit = engine.outputNode.audioUnit {
             var deviceID = dev
             let err = AudioUnitSetProperty(unit, kAudioOutputUnitProperty_CurrentDevice,
                                            kAudioUnitScope_Global, 0, &deviceID,
                                            UInt32(MemoryLayout<AudioDeviceID>.size))
-            if err != noErr { NSLog("speech: failed to select output device '%@' (%d)", outputDeviceName, err) }
+            if err == noErr {
+                appliedDeviceID = dev
+            } else {
+                NSLog("speech: failed to select output device '%@' (%d)", outputDeviceName, err)
+            }
         }
         if !engine.isRunning {
+```
+
+Also reset the tracker in the existing `AVAudioEngineConfigurationChange` observer (constructor, added in an earlier task), alongside where it resets `engineReady = false` on graph teardown — the device pin may not survive a hardware reconfiguration (dock/output swap), so forget it there too and let the next `play()` re-apply:
+
+```swift
+            if self.engineReady {
+                self.engine.disconnectNodeOutput(self.player)
+                self.engine.detach(self.player)
+                self.engineReady = false
+                self.appliedDeviceID = nil
+            }
 ```
 
 Add the imports needed at the top of `ElevenLabsTTS.swift` if not already present: `import CoreAudio` (for `AudioUnitSetProperty`/`AudioDeviceID`; `AudioUnit` comes via AVFoundation but the property constants need CoreAudio/AudioToolbox — add `import AudioToolbox` as well if the build complains).
