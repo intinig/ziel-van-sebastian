@@ -4,6 +4,7 @@ import Foundation
 /// become events. Pure — audio, STT, and the WS server are injected/adjacent.
 public final class VoicePipeline {
     public var mode: WakeMode = .armed
+    private var segmentOpen = false
     private let wakeWord: String
     private let transcribe: ([Float]) -> String
     private let emit: (VoiceEvent) -> Void
@@ -19,8 +20,10 @@ public final class VoicePipeline {
     public func segmenterEvent(_ e: UtteranceSegmenter.Event) {
         switch e {
         case .started:
+            segmentOpen = true
             emit(.vad(speaking: true))
         case .utterance(let samples):
+            segmentOpen = false
             emit(.vad(speaking: false))
             let text = transcribe(samples).trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { return }
@@ -41,7 +44,9 @@ public final class VoicePipeline {
     public func handle(_ c: VoiceCommand, resetSegmenter: () -> Void) {
         switch c {
         case .mode(let m): mode = m
-        case .stop: resetSegmenter()
+        case .stop:
+            if segmentOpen { emit(.vad(speaking: false)); segmentOpen = false }
+            resetSegmenter()
         }
     }
 }

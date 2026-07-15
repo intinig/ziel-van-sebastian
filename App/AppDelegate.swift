@@ -15,6 +15,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var occlusionObserver: NSObjectProtocol?
     private var spaceVisible = true
 
+    private var voiceClient: VoiceGatewayClient?
+    private var voiceCoordinator: VoiceCoordinator?
+    private var voiceTick: Timer?
+    private var tts: ElevenLabsTTS?
+
     init(options: RunOptions) {
         self.options = options
         super.init()
@@ -43,10 +48,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             && voiceId.unicodeScalars.allSatisfy { CharacterSet.urlPathAllowed.contains($0) }
             && !voiceId.contains("/")
         if !config.speech.apiKey.isEmpty && urlSafeVoiceId {
-            speech = SpeechCoordinator(director: director,
-                                       synth: ElevenLabsTTS(config: config.speech),
-                                       volume: config.speech.volume,
-                                       now: clock)
+            let tts = ElevenLabsTTS(config: config.speech)
+            tts.outputDeviceName = config.voice.outputDevice
+            self.tts = tts
+            speech = SpeechCoordinator(director: director, synth: tts,
+                                       volume: config.speech.volume, now: clock)
         } else if config.speech.enabled {
             NSLog("speech.enabled is true but apiKey/voiceId missing or voiceId malformed — speech disabled (restart after fixing config)")
         }
@@ -68,13 +74,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 NSLog("device identity unavailable at %@ — connecting without device pairing (gateway will clear scopes)",
                       identityURL.path)
             }
-            // TEMPORARY (Task 4 dev trigger, removed in Phase 3 when the real
-            // voice coordinator lands): ZIEL_VOICE_DEV_PROMPT, if set, is injected
-            // once as a one-shot prompt right after the gateway handshake completes
-            // (.connectionUp), exercising the input→OpenClaw→output loop without a
-            // mic. Firing on handshake — not a fixed delay — avoids racing connect.
-            let devPrompt = ProcessInfo.processInfo.environment["ZIEL_VOICE_DEV_PROMPT"]
-            var devPromptSent = false
             let gateway = GatewayClient(
                 url: url,
                 token: config.gateway.token,
@@ -83,16 +82,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     DispatchQueue.main.async {
                         if case .connectionDown = event { self?.speech?.cancelAll() }
                         director?.handle(event, now: clock())
-                        if case .connectionUp = event, let p = devPrompt, !p.isEmpty, !devPromptSent {
-                            devPromptSent = true
-                            NSLog("ZIEL_VOICE_DEV_PROMPT: sending dev prompt %@", p)
-                            self?.gateway?.sendPrompt(p)
-                        }
                     }
                 }
             )
             self.gateway = gateway
             gateway.start()
+
+            // --- Voice stack (Phase 3) ---
+            // Always constructed (cheap, inert); only *connected* when enabled, so
+            // the "never contact the gateway when disabled" invariant holds.
+            let voiceURL = URL(string: config.voice.gatewayURL)
+                ?? URL(string: VoiceConfig().gatewayURL)!
+            let controller = ConversationController(
+                followUpWindowSeconds: config.voice.followUpWindowSeconds)
+            let stopper = AppSpeechStopper(director: director, speech: self.speech)
+            let voiceClient = VoiceGatewayClient(url: voiceURL, onEvent: { [weak self] event in
+                DispatchQueue.main.async {
+                    self?.voiceCoordinator?.handle(event, now: clock())
+                }
+            })
+            let coordinator = VoiceCoordinator(
+                controller: controller, link: voiceClient, injector: gateway,
+                speaking: director, stopper: stopper,
+                bargeInEnabled: { [weak self] in self?.config.voice.bargeIn ?? false })
+            self.voiceClient = voiceClient
+            self.voiceCoordinator = coordinator
+            let tick = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { _ in
+                coordinator.tick(now: clock())
+            }
+            tick.tolerance = 0.05
+            self.voiceTick = tick
+            if config.voice.enabled { voiceClient.start() }
         }
 
         let device = MTLCreateSystemDefaultDevice()!
@@ -188,6 +208,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         gateway?.stop()
         if let occlusionObserver { NotificationCenter.default.removeObserver(occlusionObserver) }
+        voiceTick?.invalidate()
+        voiceClient?.stop()
     }
 
     private func applyDebugState(director: Director, clock: () -> TimeInterval) {
@@ -247,6 +269,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 director.updatePacing(fresh.pacing)
                 director.setSpeechEnabled(fresh.speech.enabled)
                 self?.speech?.volume = fresh.speech.volume
+                // Voice (Phase 3): bargeIn is read live via the coordinator's
+                // closure (self.config is now fresh). Apply the rest live.
+                self?.voiceCoordinator?.setFollowUpWindow(fresh.voice.followUpWindowSeconds)
+                self?.tts?.outputDeviceName = fresh.voice.outputDevice
+                if fresh.voice.enabled { self?.voiceClient?.start() }
+                else { self?.voiceClient?.stop() }
             }
             // Editors often replace the file: re-arm the watcher.
             source.cancel()
@@ -255,5 +283,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         source.setCancelHandler { close(fd) }
         source.resume()
         configWatcher = source
+    }
+}
+
+// GatewayClient already exposes `sendPrompt(_:)`.
+extension GatewayClient: PromptInjecting {}
+// Director already exposes `isSpeaking`.
+extension Director: SpeakingSource {}
+
+/// Barge-in stop: abandon the Director's focused run (even mid-stream) and clear queued TTS audio.
+final class AppSpeechStopper: SpeechStopping {
+    private weak var director: Director?
+    private weak var speech: SpeechCoordinator?
+    init(director: Director?, speech: SpeechCoordinator?) {
+        self.director = director
+        self.speech = speech
+    }
+    func stopSpeaking(now: TimeInterval) {
+        director?.abandonFocusedRun(now: now)
+        speech?.cancelAll()
     }
 }

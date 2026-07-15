@@ -327,4 +327,46 @@ final class GatewayIntegrationTests: XCTestCase {
         XCTAssertFalse((params?["idempotencyKey"] as? String ?? "").isEmpty,
                        "chat.send must include a non-empty idempotencyKey")
     }
+
+    func testSendPromptDroppedBeforeHandshake() throws {
+        // requireDeviceAuth + identity:nil => server rejects connect; handshake never completes.
+        let server = try MockGatewayServer(requestedPort: 0, expectToken: "tok",
+                                           requireDeviceAuth: true, steps: [])
+        try server.start()
+        defer { server.stop() }
+
+        let collector = Collector()
+        let client = makeClient(port: server.port, identity: nil, collector: collector)
+        client.start()
+        defer { client.stop() }
+
+        // Fire prompts during the (doomed) handshake window.
+        for _ in 0..<5 { client.sendPrompt("should-not-send") }
+
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline && !collector.snapshot().contains(.connectionDown(auth: true)) {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+
+        XCTAssertFalse(server.receivedFrames.contains { $0["method"] as? String == "chat.send" },
+                       "sendPrompt before handshake completes must be dropped, not sent with a default key")
+
+        // Discriminating assertion (this is the part that actually catches a missing/weakened
+        // guard; the chat.send assertion above passes either way in this mock environment).
+        //
+        // Pre-fix (guard only checked `task != nil`), the 5 eager sendPrompt calls above race
+        // task.send() against the not-yet-open URLSessionWebSocketTask. That corrupts the
+        // transport ("Socket is not connected"), which the client reports as a *non-auth*
+        // connectionDown and reconnects; only the second connection attempt actually reaches
+        // the mock server and gets the real DEVICE_AUTH_FAILED rejection. So pre-fix, the
+        // FIRST connectionDown event observed is auth:false.
+        //
+        // Post-fix (guard also requires handshakeComplete), sendPrompt never touches the
+        // task, so the first connection attempt is untouched and the FIRST connectionDown
+        // event is the clean auth:true rejection.
+        XCTAssertEqual(collector.snapshot().first, .connectionDown(auth: true),
+                       "first connection-down event must be the clean auth rejection, not a " +
+                       "transport failure caused by sending before the socket finished opening")
+    }
 }

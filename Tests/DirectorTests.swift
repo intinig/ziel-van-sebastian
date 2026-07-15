@@ -160,4 +160,62 @@ final class DirectorTests: XCTestCase {
         }
         XCTAssertEqual(d.runCount, 0)
     }
+
+    func testIsSpeakingReflectsPhase() {
+        let cfg = ZielConfig()
+        let look = try! ResolvedLook.resolve(cfg.look, themeOverride: nil)
+        let d = Director(config: cfg, look: look)
+        d.handle(.connectionUp, now: 0)
+        XCTAssertFalse(d.isSpeaking)                                  // idle
+        d.handle(.runStarted(run: "r", session: "s"), now: 10)
+        d.handle(.textDelta(run: "r", session: "s", text: "Hello there. "), now: 10.2)
+        _ = d.tick(now: 11)
+        XCTAssertTrue(d.isSpeaking, "text delta must put the Director in .speaking")
+    }
+
+    // Regression for PR #6 finding 1: barge-in must abandon the focused run, not
+    // just clear its backlog. Before the fix, the equivalent test calling
+    // `d.dropPendingSpeech(now:)` instead of `d.abandonFocusedRun(now:)` FAILED
+    // here — "old"'s next delta resumed speech (phase back to .speaking) and the
+    // newly injected run's text was buffered into `pending` instead of spoken
+    // (see task-7-report.md for the captured RED run).
+    func testBargeInMustAbandonStillStreamingFocusedRun() {
+        let d = makeDirector()
+        d.handle(.connectionUp, now: 0)
+        d.handle(.runStarted(run: "old", session: "s1"), now: 10)
+        d.handle(.textDelta(run: "old", session: "s1", text: "hello world "), now: 10.2)
+        XCTAssertEqual(d.tick(now: 11).word, "hello")   // old run streaming and speaking
+
+        d.abandonFocusedRun(now: 11.05)   // barge-in while "old" is still streaming
+
+        // "old" is still streaming (OpenClaw hasn't been told to stop) — its next
+        // delta must NOT resume speech.
+        d.handle(.textDelta(run: "old", session: "s1", text: "more old text "), now: 11.1)
+        XCTAssertNotEqual(d.tick(now: 11.2).phase, .speaking, "abandoned run's text must not resume speech")
+
+        // The newly injected barge-in run must take focus and speak immediately,
+        // not buffer silently into `pending` behind the still-focused old run.
+        d.handle(.runStarted(run: "new", session: "s2"), now: 11.2)
+        d.handle(.textDelta(run: "new", session: "s2", text: "new reply "), now: 11.25)
+        XCTAssertEqual(d.tick(now: 12).word, "new")
+    }
+
+    // Regression for PR #6 finding 1(b): an abandoned run must not linger in
+    // `runs` forever — its own (late) runEnded evicts it, guarding against
+    // unbounded growth across repeated barge-ins.
+    func testAbandonedRunEvictedOnItsRunEnded() {
+        let d = makeDirector()
+        d.handle(.connectionUp, now: 0)
+        d.handle(.runStarted(run: "old", session: "s1"), now: 10)
+        d.handle(.textDelta(run: "old", session: "s1", text: "hello world "), now: 10.2)
+        XCTAssertEqual(d.tick(now: 11).word, "hello")
+
+        d.abandonFocusedRun(now: 11.05)
+        XCTAssertEqual(d.runCount, 1, "abandoned run stays tracked until its own runEnded")
+
+        d.handle(.runEnded(run: "old", session: "s1"), now: 11.3)
+        XCTAssertEqual(d.runCount, 0, "abandoned run is evicted once it ends, not retained forever")
+    }
+
+    // TEMP: added after abandonFocusedRun exists (see implementation step below).
 }
