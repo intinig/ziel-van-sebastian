@@ -723,6 +723,11 @@ public final class VoiceGatewayClient: NSObject, VoiceLink, URLSessionWebSocketD
     private var task: URLSessionWebSocketTask?
     private var stopped = true
     private var attempts = 0
+    /// Whether the current connection's drop has already been handled — a
+    /// receive failure and the `didCloseWith` delegate callback can both fire
+    /// for one dropped connection; without this, both would schedule a
+    /// reconnect and `open()` would create a second, orphaned socket.
+    private var dropReported = false
     private var lastMode: WakeMode = .armed
 
     public init(url: URL, onEvent: @escaping (VoiceEvent) -> Void) {
@@ -771,6 +776,7 @@ public final class VoiceGatewayClient: NSObject, VoiceLink, URLSessionWebSocketD
 
     private func open() {
         guard !stopped else { return }
+        dropReported = false
         let t = session.webSocketTask(with: url)
         task = t
         t.resume()
@@ -791,6 +797,10 @@ public final class VoiceGatewayClient: NSObject, VoiceLink, URLSessionWebSocketD
                 case .failure:
                     self.handleDrop()
                 case .success(let message):
+                    // A message can race stop(): task is nil'd synchronously but a
+                    // receive already in flight still completes. Drop it rather than
+                    // surface events after the app disabled voice.
+                    guard !self.stopped else { return }
                     let data: Data
                     switch message {
                     case .string(let s): data = Data(s.utf8)
@@ -812,6 +822,9 @@ public final class VoiceGatewayClient: NSObject, VoiceLink, URLSessionWebSocketD
 
     private func handleDrop() {
         guard !stopped else { return }
+        // Drop already reported (idempotent guard) — see `dropReported`.
+        if dropReported { return }
+        dropReported = true
         task?.cancel(with: .normalClosure, reason: nil)
         task = nil
         attempts += 1
