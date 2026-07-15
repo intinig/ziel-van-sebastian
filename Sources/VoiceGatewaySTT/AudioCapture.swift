@@ -10,6 +10,9 @@ public final class AudioCapture {
     private let deviceName: String?
     private let queue = DispatchQueue(label: "voice-audio")
     private var residue: [Float] = []
+    private var stopped = false
+    private var restarting = false
+    private var configChangeObserver: NSObjectProtocol?
 
     public init(deviceName: String?, onFrame: @escaping ([Float]) -> Void) {
         self.deviceName = (deviceName?.isEmpty ?? true) ? nil : deviceName
@@ -18,6 +21,54 @@ public final class AudioCapture {
 
     public func start() throws {
         try requestMicAccessSync()
+        // Re-arm the lifecycle flags: a stopped-then-restarted instance must
+        // regain the configuration-change recovery path (beginRestart guards
+        // on `stopped`).
+        queue.sync {
+            stopped = false
+            restarting = false
+        }
+        try configureAndStart()
+        // A running AVAudioEngine's input can die silently when the device
+        // reconfigures (sample-rate change, USB unplug/replug, etc.) — frames
+        // keep flowing as silence with no error and VAD goes deaf. Tear down
+        // and restart the capture path when the system reports a
+        // configuration change.
+        configChangeObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil
+        ) { [weak self] _ in
+            // Fires on an arbitrary thread; hop onto `queue` to serialize
+            // with `chunk(_:)` and with `stop()`.
+            self?.queue.async { self?.beginRestart() }
+        }
+    }
+
+    public func stop() {
+        if let observer = configChangeObserver {
+            NotificationCenter.default.removeObserver(observer)
+            configChangeObserver = nil
+        }
+        queue.sync {
+            stopped = true
+            restarting = false
+            engine.inputNode.removeTap(onBus: 0)
+            engine.stop()
+            residue = []
+        }
+    }
+
+    deinit {
+        if let observer = configChangeObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    /// Selects the pinned device (if any), builds a converter for the
+    /// engine's *current* native format, installs the tap, and starts the
+    /// engine. Used both for the initial `start()` and for restarting after a
+    /// configuration-change notification — always rebuilding the format and
+    /// converter fresh so a restart picks up the device's new native format.
+    private func configureAndStart() throws {
         if let name = deviceName {
             guard let dev = Self.findInputDevice(named: name) else {
                 throw NSError(domain: "AudioCapture", code: 2,
@@ -65,10 +116,35 @@ public final class AudioCapture {
         }
     }
 
-    public func stop() {
+    // MARK: - Configuration-change recovery
+
+    /// Entry point for a configuration-change restart. Must run on `queue`.
+    private func beginRestart() {
+        guard !stopped, !restarting else { return }
+        restarting = true
+        residue = []   // stale halves of frames from the old format must not prepend the new stream
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
-        queue.sync { residue = [] }
+        attemptRestart(attempt: 1)
+    }
+
+    /// Retries `configureAndStart()` every 2 s until it succeeds. Must run on `queue`.
+    private func attemptRestart(attempt: Int) {
+        guard !stopped else { restarting = false; return }
+        do {
+            try configureAndStart()
+            restarting = false
+            log("engine restarted after configuration change (attempt \(attempt))")
+        } catch {
+            log("engine restart attempt \(attempt) failed: \(error.localizedDescription); retrying in 2s")
+            queue.asyncAfter(deadline: .now() + 2) { [weak self] in
+                self?.attemptRestart(attempt: attempt + 1)
+            }
+        }
+    }
+
+    private func log(_ s: String) {
+        FileHandle.standardError.write(Data("[AudioCapture] \(s)\n".utf8))
     }
 
     private func chunk(_ samples: [Float]) {
@@ -112,8 +188,13 @@ public final class AudioCapture {
                                                        mElement: kAudioObjectPropertyElementMain)
             var cfgSize: UInt32 = 0
             guard AudioObjectGetPropertyDataSize(id, &inputAddr, 0, nil, &cfgSize) == noErr, cfgSize > 0 else { continue }
-            let buf = UnsafeMutablePointer<AudioBufferList>.allocate(capacity: Int(cfgSize))
-            defer { buf.deallocate() }
+            // `cfgSize` is a byte count; allocate exactly that many bytes (not
+            // `cfgSize` *elements* of AudioBufferList, which would over-allocate)
+            // and bind the raw memory to the variable-length AudioBufferList type.
+            let rawBuf = UnsafeMutableRawPointer.allocate(byteCount: Int(cfgSize),
+                                                          alignment: MemoryLayout<AudioBufferList>.alignment)
+            defer { rawBuf.deallocate() }
+            let buf = rawBuf.bindMemory(to: AudioBufferList.self, capacity: 1)
             guard AudioObjectGetPropertyData(id, &inputAddr, 0, nil, &cfgSize, buf) == noErr,
                   UnsafeMutableAudioBufferListPointer(buf).reduce(0, { $0 + Int($1.mNumberChannels) }) > 0
             else { continue }
@@ -122,6 +203,9 @@ public final class AudioCapture {
                                                       mElement: kAudioObjectPropertyElementMain)
             var cfName: CFString = "" as CFString
             var nameSize = UInt32(MemoryLayout<CFString>.size)
+            // CoreAudio's Copy rule hands back a +1-retained CFString here; Swift's
+            // ARC balances it with a release when `cfName` goes out of scope below —
+            // fragile if this is ever refactored to hold the pointer/value longer.
             guard withUnsafeMutablePointer(to: &cfName, { ptr in
                 AudioObjectGetPropertyData(id, &nameAddr, 0, nil, &nameSize, ptr)
             }) == noErr else { continue }

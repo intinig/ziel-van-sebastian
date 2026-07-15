@@ -85,7 +85,13 @@ public final class VoiceGatewayClient: NSObject, VoiceLink, URLSessionWebSocketD
 
     public func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask,
                            didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
-        queue.async { self.handleDrop() }
+        queue.async {
+            // Delegate callbacks race reconnects; a stale close from a task
+            // we've already replaced (or torn down in stop()) must not tear
+            // down the current connection.
+            guard webSocketTask === self.task else { return }
+            self.handleDrop()
+        }
     }
 
     private func receiveLoop(_ t: URLSessionWebSocketTask) {
@@ -128,6 +134,9 @@ public final class VoiceGatewayClient: NSObject, VoiceLink, URLSessionWebSocketD
         task?.cancel(with: .normalClosure, reason: nil)
         task = nil
         attempts += 1
+        // First retry = 2^0 = 1s, then 2,4,8,16 (attempts incremented above).
+        // attempts clamps at 5, so 2^4 = 16s is the real ceiling — the
+        // min(30, ...) cap below is never actually reached.
         let delay = min(30, pow(2, Double(min(attempts, 5)) - 1)) + Double.random(in: 0...0.5)
         log.info("voice-gateway reconnecting in \(delay, format: .fixed(precision: 1))s")
         queue.asyncAfter(deadline: .now() + delay) { [weak self] in self?.open() }

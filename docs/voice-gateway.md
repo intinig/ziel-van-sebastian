@@ -39,13 +39,17 @@ running the opt-in tests — see Testing below.)
 ## Models
 
 ```
-make models    # ./scripts/fetch-voice-models.sh
+make models                          # ./scripts/fetch-voice-models.sh (default: base.en)
+./scripts/fetch-voice-models.sh base small   # fetch specific whisper.cpp models instead
 ```
 
 Fetches into `~/Library/Application Support/Ziel van Sebastian/models/`:
 
-- `ggml-base.en.bin` — whisper.cpp `base.en` STT model, ~141 MB
-- `ggml-silero-v5.1.2.bin` — Silero VAD model
+- `ggml-<model>.bin` for each model name given (default `base.en` when none
+  are given) — any whisper.cpp repo model suffix works (`base.en`, `base`,
+  `small`, `small.en`, `medium`, ...); see
+  https://huggingface.co/ggerganov/whisper.cpp for the full list
+- `ggml-silero-v5.1.2.bin` — Silero VAD model, always fetched
 
 The script is idempotent (skips files that already exist), so re-running it
 after a partial/interrupted fetch is safe.

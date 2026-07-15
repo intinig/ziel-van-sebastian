@@ -15,6 +15,7 @@ public final class SileroVAD {
     private let ctx: OpaquePointer
 
     public init(modelPath: String) throws {
+        _ = WhisperLogging.installOnce
         var params = whisper_vad_default_context_params()
         params.use_gpu = false   // tiny model; CPU avoids GPU contention with STT
         guard let ctx = whisper_vad_init_from_file_with_params(modelPath, params) else {

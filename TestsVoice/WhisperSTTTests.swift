@@ -43,7 +43,7 @@ final class WhisperSTTTests: XCTestCase {
         // would just re-exercise testTranscribesFixture instead of proving the
         // detection path itself.
         let model = modelsDir.appendingPathComponent("ggml-base.bin").path
-        try XCTSkipUnless(FileManager.default.fileExists(atPath: model), "run scripts/fetch-voice-models.sh (multilingual ggml-base.bin)")
+        try XCTSkipUnless(FileManager.default.fileExists(atPath: model), "run scripts/fetch-voice-models.sh base (fetches the multilingual ggml-base.bin)")
         let stt = try WhisperSTT(modelPath: model, languages: ["it", "en"])
         let text = stt.transcribe(try fixtureSamples()).lowercased()
         XCTAssertTrue(text.contains("sebastian"), "got: \(text)")
@@ -55,7 +55,7 @@ final class WhisperSTTTests: XCTestCase {
         // allowlist, transcription must fall back to unclamped auto-detect
         // rather than crash or leave params.language dangling.
         let model = modelsDir.appendingPathComponent("ggml-base.bin").path
-        try XCTSkipUnless(FileManager.default.fileExists(atPath: model), "run scripts/fetch-voice-models.sh (multilingual ggml-base.bin)")
+        try XCTSkipUnless(FileManager.default.fileExists(atPath: model), "run scripts/fetch-voice-models.sh base (fetches the multilingual ggml-base.bin)")
         let stt = try WhisperSTT(modelPath: model, languages: ["xx"])
         let text = stt.transcribe(try fixtureSamples()).lowercased()
         XCTAssertTrue(text.contains("sebastian"), "got: \(text)")
