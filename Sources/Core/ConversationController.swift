@@ -19,7 +19,7 @@ public final class ConversationController {
 
     public private(set) var state: State = .idle
 
-    private let followUpWindow: TimeInterval
+    private var followUpWindow: TimeInterval
     private let listenWindow: TimeInterval
     private let replyTimeout: TimeInterval
     private var windowStart: TimeInterval = 0
@@ -84,4 +84,7 @@ public final class ConversationController {
             return []
         }
     }
+
+    /// Live-reload of `voice.followUpWindowSeconds`; takes effect on the next tick.
+    public func setFollowUpWindow(_ seconds: TimeInterval) { followUpWindow = seconds }
 }
