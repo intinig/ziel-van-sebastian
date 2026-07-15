@@ -212,16 +212,16 @@ public final class Director {
         )
     }
 
+    /// True exactly while the face is speaking a reply. The voice coordinator
+    /// samples this to drive replyStarted/replyFinished and to gate barge-in.
+    public var isSpeaking: Bool { phase == .speaking }
+
     // MARK: - Internals
 
     private var isOnline: Bool {
         if case .offline = phase { return false }
         return true
     }
-
-    /// True exactly while the face is speaking a reply. The voice coordinator
-    /// samples this to drive replyStarted/replyFinished and to gate barge-in.
-    public var isSpeaking: Bool { phase == .speaking }
 
     private func resetAll() {
         runs.removeAll()

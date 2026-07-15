@@ -67,7 +67,8 @@ public final class GatewayClient: NSObject, URLSessionWebSocketDelegate {
         queue.async { [weak self] in
             guard let self else { return }
             guard let task = self.task, self.handshakeComplete else {
-                self.log.error("sendPrompt dropped: gateway not connected/handshaked")
+                // Expected during (re)connect — not an error.
+                self.log.notice("sendPrompt dropped: gateway not connected/handshaked")
                 return
             }
             let frame = OpenClawTranslator.promptFrame(

@@ -22,8 +22,13 @@ public enum AudioOutputDevice {
                                                      mElement: kAudioObjectPropertyElementMain)
             var cfgSize: UInt32 = 0
             guard AudioObjectGetPropertyDataSize(id, &outAddr, 0, nil, &cfgSize) == noErr, cfgSize > 0 else { continue }
-            let buf = UnsafeMutablePointer<AudioBufferList>.allocate(capacity: Int(cfgSize))
-            defer { buf.deallocate() }
+            // `cfgSize` is a byte count; allocate exactly that many bytes (not
+            // `cfgSize` *elements* of AudioBufferList, which would over-allocate)
+            // and bind the raw memory to the variable-length AudioBufferList type.
+            let rawBuf = UnsafeMutableRawPointer.allocate(byteCount: Int(cfgSize),
+                                                          alignment: MemoryLayout<AudioBufferList>.alignment)
+            defer { rawBuf.deallocate() }
+            let buf = rawBuf.bindMemory(to: AudioBufferList.self, capacity: 1)
             guard AudioObjectGetPropertyData(id, &outAddr, 0, nil, &cfgSize, buf) == noErr,
                   UnsafeMutableAudioBufferListPointer(buf).reduce(0, { $0 + Int($1.mNumberChannels) }) > 0
             else { continue }
@@ -32,6 +37,9 @@ public enum AudioOutputDevice {
                                                       mElement: kAudioObjectPropertyElementMain)
             var cfName: CFString = "" as CFString
             var nameSize = UInt32(MemoryLayout<CFString>.size)
+            // CoreAudio's Copy rule hands back a +1-retained CFString here; Swift's
+            // ARC balances it with a release when `cfName` goes out of scope below —
+            // fragile if this is ever refactored to hold the pointer/value longer.
             guard withUnsafeMutablePointer(to: &cfName, { ptr in
                 AudioObjectGetPropertyData(id, &nameAddr, 0, nil, &nameSize, ptr)
             }) == noErr else { continue }
