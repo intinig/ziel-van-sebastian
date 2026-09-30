@@ -14,6 +14,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var speech: SpeechCoordinator?
     private var occlusionObserver: NSObjectProtocol?
     private var spaceVisible = true
+    private var fullscreenEntry = FullscreenEntry()
+    private var fullscreenVerify: Timer?
 
     private var voiceClient: VoiceGatewayClient?
     private var voiceCoordinator: VoiceCoordinator?
@@ -159,6 +161,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.titlebarAppearsTransparent = true
             window.styleMask.insert(.fullSizeContentView)
             window.collectionBehavior = [.fullScreenPrimary]
+            window.delegate = self   // fullscreen enter/fail callbacks feed `fullscreenEntry`
             self.displayManager = DisplayManager(window: window, config: config.display)
         }
         window.contentView = mtkView
@@ -171,7 +174,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !options.window {
             // Native fullscreen → a dedicated Space macOS switches to; swipe away
             // for a work desktop and back. Placed on the target screen first.
-            window.toggleFullScreen(nil)
+            // Verified and retried: at login macOS can silently drop the request.
+            requestFullscreen()
         }
 
         if !options.window {
@@ -205,8 +209,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
+    private func requestFullscreen() {
+        guard let window else { return }
+        let delay = fullscreenEntry.requested()
+        window.toggleFullScreen(nil)
+        scheduleFullscreenVerify(after: delay)
+    }
+
+    private func scheduleFullscreenVerify(after delay: TimeInterval) {
+        fullscreenVerify?.invalidate()
+        fullscreenVerify = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
+            self?.verifyFullscreen(recheckAfter: delay)
+        }
+    }
+
+    private func verifyFullscreen(recheckAfter delay: TimeInterval) {
+        guard let window, !fullscreenEntry.isDone else { return }
+        if window.styleMask.contains(.fullScreen) {
+            fullscreenEntry.didEnter()   // got there without a callback we saw
+            return
+        }
+        if fullscreenEntry.shouldRequest(isFullscreen: false) {
+            NSLog("fullscreen: not entered after attempt %d, requesting again", fullscreenEntry.attempts)
+            requestFullscreen()
+        } else {
+            scheduleFullscreenVerify(after: delay)   // a transition is in flight; look again later
+        }
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         gateway?.stop()
+        fullscreenVerify?.invalidate()
         if let occlusionObserver { NotificationCenter.default.removeObserver(occlusionObserver) }
         voiceTick?.invalidate()
         voiceClient?.stop()
@@ -283,6 +316,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         source.setCancelHandler { close(fd) }
         source.resume()
         configWatcher = source
+    }
+}
+
+extension AppDelegate: NSWindowDelegate {
+    func windowWillEnterFullScreen(_ notification: Notification) { fullscreenEntry.willEnter() }
+
+    func windowDidEnterFullScreen(_ notification: Notification) {
+        fullscreenEntry.didEnter()
+        fullscreenVerify?.invalidate()
+        NSLog("fullscreen: entered after %d attempt(s)", fullscreenEntry.attempts)
+    }
+
+    func windowDidFailToEnterFullScreen(_ window: NSWindow) {
+        fullscreenEntry.didFail()
+        NSLog("fullscreen: macOS reported a failed transition (attempt %d)", fullscreenEntry.attempts)
     }
 }
 
